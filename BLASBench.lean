@@ -67,6 +67,35 @@ where
       else y
     else y
 
+/-- `α * x` on core's `FloatArray`, as a loop over `USize` indices. -/
+partial def refScal (α : Float) (x : FloatArray) : FloatArray :=
+  loop x 0
+where
+  /-- The loop from index `i`. -/
+  loop (x : FloatArray) (i : USize) : FloatArray :=
+    if h : i.toNat < x.size then loop (x.uset i (α * x.uget i h) h) (i + 1) else x
+
+/-- The dot product on core's `FloatArray`, as a loop over `USize` indices with checked reads. -/
+partial def refDot (x y : FloatArray) : Float :=
+  loop 0 0
+where
+  /-- The loop from index `i`. -/
+  loop (i : USize) (s : Float) : Float :=
+    if h : i.toNat < x.size then
+      if hy : i.toNat < y.size then loop (i + 1) (s + x.uget i h * y.uget i hy) else s
+    else s
+
+/-- `iamax` on core's `FloatArray`, as a loop over `USize` indices. -/
+partial def refIamax (x : FloatArray) : Nat :=
+  loop 0 0 0
+where
+  /-- The loop from index `i`. -/
+  loop (i : USize) (k : USize) (m : Float) : Nat :=
+    if h : i.toNat < x.size then
+      let a := (x.uget i h).abs
+      if i == 0 || a > m then loop (i + 1) i a else loop (i + 1) k m
+    else k.toNat
+
 /-- The benchmarks. -/
 def rows (rounds n : Nat) : IO (List Row) := do
   let x := vec n
@@ -85,7 +114,34 @@ def rows (rounds n : Nat) : IO (List Row) := do
     for _ in [0:reps] do
       z := refAxpy 0.5 x' z
     return z[0]!
-  return [⟨"sum (baseline)", sum, some sum'⟩, ⟨s!"axpy ×{reps}", axpy, some axpy'⟩]
+  let scal ← time rounds n fun _ => Id.run do
+    let mut z := v
+    for _ in [0:reps] do
+      z := BLAS.Float64.Vec.scal 0.5 z
+    return z.data[0]!
+  let scal' ← time rounds n fun _ => Id.run do
+    let mut z := x'
+    for _ in [0:reps] do
+      z := refScal 0.5 z
+    return z[0]!
+  let w : BLAS.Float64.Vec n := .ofFn fun i => i.val.toFloat
+  let copy ← time rounds n fun _ => Id.run do
+    let mut z := w
+    for _ in [0:reps] do
+      z := BLAS.Float64.Vec.copy v z
+    return z.data[0]!
+  let dot ← time rounds n fun _ => BLAS.Float64.Vec.dot v v
+  let dot' ← time rounds n fun _ => refDot x' x'
+  let asum ← time rounds n fun _ => BLAS.Float64.Vec.asum v
+  let asum' ← time rounds n fun _ => x'.foldl (fun s a => s + a.abs) 0
+  let nrm2 ← time rounds n fun _ => BLAS.Float64.Vec.nrm2 v
+  let nrm2' ← time rounds n fun _ => (x'.foldl (fun s a => s + a * a) 0).sqrt
+  let iamax ← time rounds n fun _ => (BLAS.Float64.Vec.iamax v).toFloat
+  let iamax' ← time rounds n fun _ => (refIamax x').toFloat
+  return [⟨"sum (baseline)", sum, some sum'⟩, ⟨s!"axpy ×{reps}", axpy, some axpy'⟩,
+    ⟨s!"scal ×{reps}", scal, some scal'⟩, ⟨s!"copy ×{reps}", copy, none⟩,
+    ⟨"dot", dot, some dot'⟩, ⟨"asum", asum, some asum'⟩, ⟨"nrm2", nrm2, some nrm2'⟩,
+    ⟨"iamax", iamax, some iamax'⟩]
 
 /-- A time in milliseconds with three decimals. -/
 def fmt (t : Float) : String :=
