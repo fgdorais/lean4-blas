@@ -6,8 +6,8 @@ Basic Linear Algebra Subprograms written entirely in Lean 4, on the unboxed arra
 [lean4-scalar-arrays](https://github.com/fgdorais/lean4-scalar-arrays), with no C code of its own.
 The routines come with proved specifications; their speed is measured, not promised.
 
-The library is at an early stage. It has the BLAS Level 1 routines on `Float64`; strided vectors,
-matrices and Level 2 come next.
+The library is at an early stage. It has the BLAS Level 1 routines and `gemm` on `Float64`; faster
+`gemm` kernels, strided vectors and Level 2 come next.
 
 ## Usage
 
@@ -42,6 +42,17 @@ specification as an exact `Float` equality, in the order the routine evaluates:
 
 The updates work in place when their output vector is not shared, and copy it once otherwise.
 `nrm2` doesn't scale its elements, so unlike the reference BLAS it can overflow or underflow.
+
+`Mat m n` is an `m × n` matrix, stored contiguously in column-major order: `A[(i, j)]` is at the
+index `i + m * j`. `Mat.gemm α A B β C`, for `A : Mat m k`, `B : Mat k n` and `C : Mat m n`, is
+`α * A * B + β * C`, over `C`, in the order of the reference BLAS:
+
+```lean
+(gemm α A B β C)[(i, j)] =
+  Nat.fold k (fun l _ s => s + α * B[(l, j)] * A[(i, l)]) (β * C[(i, j)])
+```
+
+Unlike the reference BLAS, `β = 0` doesn't clear `C`, so a `NaN` in `C` stays a `NaN`.
 
 ## Installation
 
