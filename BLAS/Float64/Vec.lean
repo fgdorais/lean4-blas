@@ -34,6 +34,14 @@ public instance : GetElem (Vec n) Nat Float fun _ i => i < n where
 public theorem getElem_def (x : Vec n) (i : Nat) (h : i < n) :
     x[i] = x.data[i]'(by rw [x.size_data]; exact h) := rfl
 
+/-- The element at the `USize` index `i`. It compiles to an inline load. -/
+@[inline] public def uget (x : Vec n) (i : USize) (h : i.toNat < n) : Float :=
+  x.data.uget i (by rw [x.size_data]; exact h)
+
+@[simp] public theorem uget_eq_getElem (x : Vec n) (i : USize) (h : i.toNat < n) :
+    x.uget i h = x[i.toNat] := by
+  simp [uget, getElem_def]
+
 /-- The vector with the elements `f i`. -/
 public def ofFn (f : Fin n → Float) : Vec n := ⟨.ofFn f, by simp⟩
 
