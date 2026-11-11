@@ -113,30 +113,30 @@ public def swap (x y : Vec n) : Vec n × Vec n := (y, x)
 
 /-- The dot product `x[0] * y[0] + … + x[n - 1] * y[n - 1]`, summed from the left. -/
 public def dot (x y : Vec n) : Float :=
-  foldUpTo n (fun i h s => s + x[i] * y[i]) 0
+  foldUpTo n (fun i h s => s + x[i] * y[i]) (fun i h s => s + x.uget i h * y.uget i h) 0
 
 public theorem dot_eq (x y : Vec n) :
     dot x y = Nat.fold n (fun i h s => s + x[i] * y[i]) 0 :=
-  foldUpTo_eq ..
+  foldUpTo_eq _ _ _ (by simp) _
 
 /-- The sum of the absolute values `|x[0]| + … + |x[n - 1]|`, summed from the left. -/
 public def asum (x : Vec n) : Float :=
-  foldUpTo n (fun i h s => s + x[i].abs) 0
+  foldUpTo n (fun i h s => s + x[i].abs) (fun i h s => s + (x.uget i h).abs) 0
 
 public theorem asum_eq (x : Vec n) :
     asum x = Nat.fold n (fun i h s => s + x[i].abs) 0 :=
-  foldUpTo_eq ..
+  foldUpTo_eq _ _ _ (by simp) _
 
 /--
 The Euclidean norm `√(x[0] * x[0] + … + x[n - 1] * x[n - 1])`, summed from the left. Unlike the
 reference BLAS, it doesn't scale the elements, so the sum may overflow or underflow.
 -/
 public def nrm2 (x : Vec n) : Float :=
-  (foldUpTo n (fun i h s => s + x[i] * x[i]) 0).sqrt
+  (foldUpTo n (fun i h s => s + x[i] * x[i]) (fun i h s => s + x.uget i h * x.uget i h) 0).sqrt
 
 public theorem nrm2_eq (x : Vec n) :
     nrm2 x = (Nat.fold n (fun i h s => s + x[i] * x[i]) 0).sqrt := by
-  rw [nrm2, foldUpTo_eq]
+  rw [nrm2, foldUpTo_eq _ _ _ (by simp)]
 
 /-- One step of `iamax`: the index and absolute value of the first largest element so far. -/
 @[inline, expose] public def iamaxStep (x : Vec n) (i : Nat) (h : i < n) (b : Nat × Float) :
@@ -145,14 +145,72 @@ public theorem nrm2_eq (x : Vec n) :
   if i = 0 ∨ a > b.2 then (i, a) else b
 
 /--
+The loop of `iamax` from the index `i`, up to the bound `m`, which is `n`, with the index `k` and
+absolute value `a` of the first largest element so far. It keeps them in two loop variables rather
+than a pair, which would be allocated at every new largest element.
+-/
+public def iamaxLoop (x : Vec n) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float) : Nat :=
+  if hi : i < m then
+    let b := (x.uget i (hm ▸ hi)).abs
+    if i = 0 ∨ b > a then iamaxLoop x m hm (i + 1) i b else iamaxLoop x m hm (i + 1) k a
+  else k.toNat
+termination_by m.toNat - i.toNat
+decreasing_by
+  all_goals
+    rw [USize.lt_iff_toNat_lt] at hi
+    have : m.toNat < USize.size := m.toNat_lt_size
+    have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
+    rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by omega)]
+    omega
+
+private theorem iamaxLoop_eq (x : Vec n) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float)
+    (j : Nat) (hj : i.toNat = j) (hjn : j ≤ n)
+    (hacc : Nat.fold j (fun l hl => iamaxStep x l (by omega)) (0, 0) = (k.toNat, a)) :
+    iamaxLoop x m hm i k a = (Nat.fold n (iamaxStep x) (0, 0)).1 := by
+  obtain ⟨d, hd⟩ : ∃ d, n - j = d := ⟨_, rfl⟩
+  induction d generalizing i k a j with
+  | zero =>
+    rw [iamaxLoop, dite_eq_right_of_eq_false (eq_false (by rw [USize.lt_iff_toNat_lt]; omega))]
+    obtain rfl : j = n := by omega
+    rw [hacc]
+  | succ d ih =>
+    have hi : i < m := by rw [USize.lt_iff_toNat_lt]; omega
+    have hsucc : (i + 1).toNat = j + 1 := by
+      have : m.toNat < USize.size := m.toNat_lt_size
+      have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
+      rw [USize.lt_iff_toNat_lt] at hi
+      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by omega), hj]
+    have hstep : Nat.fold (j + 1) (fun l hl => iamaxStep x l (by omega)) (0, 0) =
+        iamaxStep x j (by omega) (k.toNat, a) := by
+      rw [Nat.fold_succ, hacc]
+    rw [iamaxLoop, dite_eq_left_of_eq_true (eq_true hi)]
+    simp only [uget_eq_getElem]
+    subst hj
+    split
+    next hc =>
+      refine ih (i + 1) i _ (i.toNat + 1) hsucc (by omega) ?_ (by omega)
+      have hc' : i.toNat = 0 ∨ x[i.toNat].abs > a := by simpa [← USize.toNat_inj] using hc
+      rw [hstep]
+      simp only [iamaxStep, hc', ite_true]
+    next hc =>
+      refine ih (i + 1) k a (i.toNat + 1) hsucc (by omega) ?_ (by omega)
+      have hc' : ¬(i.toNat = 0 ∨ x[i.toNat].abs > a) := by simpa [← USize.toNat_inj] using hc
+      rw [hstep]
+      simp only [iamaxStep, hc', ite_false]
+
+/--
 The index of the first element of largest absolute value, or `0` for the empty vector. As in the
 reference BLAS, a `NaN` is never larger, unless it is the first element.
 -/
 public def iamax (x : Vec n) : Nat :=
-  (foldUpTo n (iamaxStep x) (0, 0)).1
+  if hn : n < USize.size then iamaxLoop x n.toUSize (by simp [Nat.mod_eq_of_lt hn]) 0 0 0
+  else (Nat.fold n (iamaxStep x) (0, 0)).1
 
 public theorem iamax_eq (x : Vec n) : iamax x = (Nat.fold n (iamaxStep x) (0, 0)).1 := by
-  rw [iamax, foldUpTo_eq]
+  unfold iamax
+  split
+  · exact iamaxLoop_eq x _ _ 0 0 0 0 (by simp) (by omega) (by simp)
+  · rfl
 
 end Vec
 

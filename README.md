@@ -64,8 +64,8 @@ The tests in `BLASTest` are `#guard` checks that run when the test library is bu
 `precompileModules`, so the checks call the compiled code of scalar-arrays rather than evaluating
 its Lean model.
 
-`lake exe bench [--tsv] [size] [rounds]` times the routines and compares each with a reference on
-core's `FloatArray` where there is one. `lake build` compiles it so that it keeps up with the API,
+`lake exe bench [--tsv] [size] [rounds]` times the routines and compares each with a hand-written
+`USize` loop where there is one. `lake build` compiles it so that it keeps up with the API,
 but CI doesn't run it. To run it on GitHub, add the `benchmark` label to a pull request, which
 compares the pull request with its base, or start the Benchmarks workflow from the Actions tab.
 
