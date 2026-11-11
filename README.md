@@ -6,7 +6,42 @@ Basic Linear Algebra Subprograms written entirely in Lean 4, on the unboxed arra
 [lean4-scalar-arrays](https://github.com/fgdorais/lean4-scalar-arrays), with no C code of its own.
 The routines come with proved specifications; their speed is measured, not promised.
 
-The library is at an early stage: this is its scaffolding, and the Level 1 routines come next.
+The library is at an early stage. It has the BLAS Level 1 routines on `Float64`; strided vectors,
+matrices and Level 2 come next.
+
+## Usage
+
+```lean
+import BLAS
+
+open BLAS.Float64
+
+def x : Vec 3 := .ofList [1, 2, 3]
+def y : Vec 3 := .ofList [4, 5, 6]
+
+#eval (Vec.axpy 2 x y).toList  -- [6, 9, 12]
+#eval Vec.dot x y              -- 32
+
+example (α : Float) (x y : Vec n) (i : Nat) (h : i < n) :
+    (Vec.axpy α x y)[i] = α * x[i] + y[i] := by simp
+```
+
+`Vec n` is a vector of `n` floats, stored contiguously in a `Float64Array`. Every routine has a
+specification as an exact `Float` equality, in the order the routine evaluates:
+
+| Routine | Result | Specification |
+|---|---|---|
+| `axpy α x y` | `α * x + y`, over `y` | `(axpy α x y)[i] = α * x[i] + y[i]` |
+| `scal α x` | `α * x`, over `x` | `(scal α x)[i] = α * x[i]` |
+| `copy x y` | `x`, over `y` | `(copy x y)[i] = x[i]` |
+| `swap x y` | `(y, x)` | `swap_fst`, `swap_snd` |
+| `dot x y` | `Σ x[i] * y[i]` | `Nat.fold n (fun i h s => s + x[i] * y[i]) 0` |
+| `asum x` | `Σ \|x[i]\|` | `Nat.fold n (fun i h s => s + x[i].abs) 0` |
+| `nrm2 x` | `√(Σ x[i] * x[i])` | `(Nat.fold n (fun i h s => s + x[i] * x[i]) 0).sqrt` |
+| `iamax x` | index of the first largest `\|x[i]\|` | `(Nat.fold n (iamaxStep x) (0, 0)).1` |
+
+The updates work in place when their output vector is not shared, and copy it once otherwise.
+`nrm2` doesn't scale its elements, so unlike the reference BLAS it can overflow or underflow.
 
 ## Installation
 
