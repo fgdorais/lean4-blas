@@ -1,0 +1,78 @@
+name: Update Main Toolchain
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 4 * * *"
+
+concurrency:
+  group: update-main-toolchain
+  cancel-in-progress: false
+
+jobs:
+  update-main-toolchain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.BATTERIES_CELL_TOKEN }}
+
+      - name: Gather revisions and update toolchain
+        id: toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CURRENT_TOOLCHAIN=$(git show origin/main:lean-toolchain | tr -d '\n')
+
+          # The newest release of Lean, including release candidates.
+          TAG=$(gh api "repos/leanprover/lean4/releases?per_page=1" --jq '.[0].tag_name')
+          if [[ "$TAG" != v[0-9]* ]]; then
+            echo "::error::Unexpected Lean release: ${TAG}"
+            exit 1
+          fi
+          REQUESTED_TOOLCHAIN="leanprover/lean4:${TAG}"
+
+          if [ "$CURRENT_TOOLCHAIN" = "$REQUESTED_TOOLCHAIN" ]; then
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "requested_toolchain=$REQUESTED_TOOLCHAIN" >> "$GITHUB_OUTPUT"
+          echo "toolchain_rev=${REQUESTED_TOOLCHAIN#leanprover/lean4:}" >> "$GITHUB_OUTPUT"
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+
+      - name: Merge nightly-testing
+        if: steps.toolchain.outputs.updated == 'true'
+        env:
+          REQUESTED_TOOLCHAIN: ${{ steps.toolchain.outputs.requested_toolchain }}
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          git merge --no-edit origin/nightly-testing
+          git restore --source=origin/main -- lakefile.toml
+          echo "$REQUESTED_TOOLCHAIN" > lean-toolchain
+
+      - name: Install Lean
+        if: steps.toolchain.outputs.updated == 'true'
+        uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          auto-config: false
+          use-github-cache: false
+
+      - name: Update manifest
+        if: steps.toolchain.outputs.updated == 'true'
+        run: lake update --keep-toolchain
+
+      - name: Create pull request
+        if: steps.toolchain.outputs.updated == 'true'
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
+        with:
+          token: ${{ secrets.BATTERIES_CELL_TOKEN }}
+          commit-message: "chore: update toolchain to ${{ steps.toolchain.outputs.toolchain_rev }}"
+          branch: update-main-toolchain
+          base: main
+          delete-branch: true
+          title: "chore: update toolchain to ${{ steps.toolchain.outputs.toolchain_rev }}"

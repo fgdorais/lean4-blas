@@ -1,0 +1,31 @@
+name = "«lean4-blas»"
+defaultTargets = ["BLAS", "BLASTest", "bench"]
+testDriver = "BLASTest"
+
+# Linters that are off by default.
+leanOptions = { linter.missingDocs = true, linter.extra = true }
+
+# Pinned to an exact version: the kernels use the experimental `inplace` notation, which is outside
+# scalar-arrays' stability promise.
+[[require]]
+name = "lean4-scalar-arrays"
+git = "https://github.com/fgdorais/lean4-scalar-arrays"
+rev = "v1.3.0"
+
+[[lean_lib]]
+name = "BLAS"
+# Lets the interpreter run scalar-arrays' `extern` C code in downstream files, for `#eval` and
+# `#guard`.
+precompileModules = true
+# Aligns loops to 64 bytes, so that a loop's speed doesn't depend on where unrelated code shifts it.
+moreLeancArgs = ["-falign-loops=64"]
+
+[[lean_lib]]
+name = "BLASTest"
+precompileModules = true
+
+[[lean_exe]]
+name = "bench"
+root = "BLASBench"
+# As for `BLAS`, since the benchmarked loops are mostly inlined here.
+moreLeancArgs = ["-falign-loops=64"]
