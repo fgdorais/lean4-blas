@@ -53,6 +53,20 @@ structure Row where
 /-- A vector of `n` elements computed from their indices. -/
 def vec (n : Nat) : Float64Array := .ofFn (n := n) fun i => (i.val % 7).toFloat - 3
 
+/-- The number of times each update runs per round: the first copies the shared input. -/
+def reps : Nat := 10
+
+/-- `α * x + y` on core's `FloatArray`, as a loop over `USize` indices with checked reads. -/
+partial def refAxpy (α : Float) (x y : FloatArray) : FloatArray :=
+  loop y 0
+where
+  /-- The loop from index `i`. -/
+  loop (y : FloatArray) (i : USize) : FloatArray :=
+    if h : i.toNat < y.size then
+      if hx : i.toNat < x.size then loop (y.uset i (α * x.uget i hx + y.uget i h) h) (i + 1)
+      else y
+    else y
+
 /-- The benchmarks. -/
 def rows (rounds n : Nat) : IO (List Row) := do
   let x := vec n
@@ -60,7 +74,18 @@ def rows (rounds n : Nat) : IO (List Row) := do
   -- A baseline for the harness: a plain read-only loop over each array.
   let sum ← time rounds n fun _ => x.foldl (· + ·) 0
   let sum' ← time rounds n fun _ => x'.foldl (· + ·) 0
-  return [⟨"sum (baseline)", sum, some sum'⟩]
+  let v : BLAS.Float64.Vec n := ⟨x, by simp [x, vec]⟩
+  let axpy ← time rounds n fun _ => Id.run do
+    let mut z := v
+    for _ in [0:reps] do
+      z := BLAS.Float64.Vec.axpy 0.5 v z
+    return z.data[0]!
+  let axpy' ← time rounds n fun _ => Id.run do
+    let mut z := x'
+    for _ in [0:reps] do
+      z := refAxpy 0.5 x' z
+    return z[0]!
+  return [⟨"sum (baseline)", sum, some sum'⟩, ⟨s!"axpy ×{reps}", axpy, some axpy'⟩]
 
 /-- A time in milliseconds with three decimals. -/
 def fmt (t : Float) : String :=

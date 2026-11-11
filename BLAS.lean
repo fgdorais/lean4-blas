@@ -6,6 +6,7 @@ module
 
 public import ScalarArray
 public import ScalarArray.InPlaceSyntax
+public import BLAS.Float64
 
 /-!
 # BLAS
