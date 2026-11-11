@@ -1,0 +1,16 @@
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/fgdorais/lean4-scalar-arrays",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "24551eb9c58ca7123ce23c8a11732b544e901a3b",
+   "name": "«lean4-scalar-arrays»",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "v1.3.0",
+   "inherited": false,
+   "configFile": "lakefile.toml"}],
+ "name": "«lean4-blas»",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
