@@ -83,4 +83,52 @@ public theorem run_forInFrom_map {n : Nat} {γ : Type} (hi j₀ : USize)
     · simp only [hij, ite_false]
       split <;> split <;> first | rfl | omega
 
+/-! ## Reductions -/
+
+/--
+`Nat.fold n f init`, as a loop over `USize` indices when `n < USize.size`, which holds for the size
+of every array in memory, and as `Nat.fold` otherwise. It keeps a scalar `β` unboxed.
+-/
+@[specialize] public def foldUpTo {β : Type u} (n : Nat) (f : (i : Nat) → i < n → β → β)
+    (init : β) : β :=
+  if hn : n < USize.size then loop hn 0 init else Nat.fold n f init
+where
+  /-- The loop from the index `i`. -/
+  @[specialize] loop (hn : n < USize.size) (i : USize) (b : β) : β :=
+    if hi : i.toNat < n then loop hn (i + 1) (f i.toNat hi b) else b
+  termination_by n - i.toNat
+  decreasing_by
+    have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
+    rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by omega)]
+    omega
+
+private theorem foldUpTo_loop_eq {β : Type u} (n : Nat) (f : (i : Nat) → i < n → β → β)
+    (hn : n < USize.size) (i : USize) (k : Nat) (hk : i.toNat = k) (hkn : k ≤ n) (init : β) :
+    foldUpTo.loop n f hn i (Nat.fold k (fun j hj => f j (by omega)) init) =
+      Nat.fold n f init := by
+  obtain ⟨d, hd⟩ : ∃ d, n - k = d := ⟨_, rfl⟩
+  induction d generalizing i k with
+  | zero =>
+    rw [foldUpTo.loop, dite_eq_right_of_eq_false (eq_false (by omega))]
+    obtain rfl : k = n := by omega
+    rfl
+  | succ d ih =>
+    have hi : i.toNat < n := by omega
+    have hsucc : (i + 1).toNat = k + 1 := by
+      have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
+      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by omega), hk]
+    rw [foldUpTo.loop, dite_eq_left_of_eq_true (eq_true hi)]
+    have := ih (i + 1) (k + 1) hsucc (by omega) (by omega)
+    rw [Nat.fold_succ] at this
+    subst hk
+    exact this
+
+public theorem foldUpTo_eq {β : Type u} (n : Nat) (f : (i : Nat) → i < n → β → β) (init : β) :
+    foldUpTo n f init = Nat.fold n f init := by
+  unfold foldUpTo
+  split
+  · rename_i hn
+    simpa using foldUpTo_loop_eq n f hn 0 0 (by simp) (by omega) init
+  · rfl
+
 end BLAS.Float64
