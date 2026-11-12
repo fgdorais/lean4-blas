@@ -76,7 +76,7 @@ public theorem gemmBy_eq (α β : Float) (f : PMat m k → PMat k n → PMat m n
     intro i j hij
     simp only [PMat.getElem_def, getElem_def, h.1, h.2.1]
     congr 1
-    omega
+    lia
   · exact key _ (fun i j h => getElem_pack C i j h)
 
 /--
