@@ -20,17 +20,6 @@ open ScalarArray
 
 namespace BLAS.Float64
 
-/--
-`(x + y * z).toNat = x.toNat + y.toNat * z.toNat` when the result doesn't wrap around: the index
-of the element `z` of a stride `y` at `x`.
--/
-public theorem USize.toNat_add_mul_of_lt {x y z : USize}
-    (h : x.toNat + y.toNat * z.toNat < USize.size) :
-    (x + y * z).toNat = x.toNat + y.toNat * z.toNat := by
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  rw [USize.toNat_add, USize.toNat_mul, Nat.mod_eq_of_lt (a := y.toNat * z.toNat) (by lia),
-    Nat.mod_eq_of_lt h]
-
 /-- `(j + 1 + k).toNat = j.toNat + 1 + k.toNat` when the result doesn't wrap around. -/
 public theorem USize.toNat_succ_add {j k : USize} (h : j.toNat + 1 + k.toNat < USize.size) :
     (j + 1 + k).toNat = j.toNat + 1 + k.toNat := by
@@ -75,25 +64,27 @@ namespace Vec
 
 variable {n : Nat}
 
+/--
+The indices `off + inc * i` of the elements, as a scalar-arrays `Stride`: element `i` is at the
+index `x.stride.idx i`.
+-/
+@[expose] public def stride (x : Vec n) : Stride := ⟨x.off, x.inc⟩
+
+@[simp] public theorem off_stride (x : Vec n) : x.stride.off = x.off := rfl
+
+@[simp] public theorem inc_stride (x : Vec n) : x.stride.inc = x.inc := rfl
+
+public theorem idx_stride (x : Vec n) (i : Nat) : x.stride.idx i = x.off + x.inc * i := rfl
+
+/-- The `n` elements of a vector fit in its array, at distinct indices. -/
+public theorem fits (x : Vec n) : x.stride.Fits n x.data.size := ⟨x.inc_pos, x.bound⟩
+
 /-- The index `off + inc * i` of element `i < n` is in the array. -/
-public theorem index_lt (x : Vec n) {i : Nat} (h : i < n) : x.off + x.inc * i < x.data.size := by
-  have : x.inc * i ≤ x.inc * (n - 1) := Nat.mul_le_mul_left _ (by lia)
-  rcases x.bound with h' | h' <;> lia
+public theorem index_lt (x : Vec n) {i : Nat} (h : i < n) : x.off + x.inc * i < x.data.size :=
+  x.fits.idx_lt h
 
 /-- A vector has at most as many elements as its array. -/
-public theorem le_size (x : Vec n) : n ≤ x.data.size := by
-  rcases Nat.lt_or_ge n 2 with h | h
-  · rcases Nat.lt_or_ge n 1 with h' | h'
-    · lia
-    · have := x.index_lt (i := 0) (by lia); lia
-  · have hinc : 0 < x.inc := by rcases x.inc_pos with h' | h' <;> lia
-    have : n - 1 ≤ x.inc * (n - 1) := Nat.le_mul_of_pos_left _ hinc
-    have := x.index_lt (i := n - 1) (by lia)
-    lia
-
-/-- The steps `i < n` of a vector are at distinct indices: `inc > 0`, or `i = 0`. -/
-public theorem inc_pos_of_lt (x : Vec n) {i : Nat} (h : i < n) : 0 < x.inc ∨ i = 0 := by
-  rcases x.inc_pos with h' | h' <;> lia
+public theorem le_size (x : Vec n) : n ≤ x.data.size := x.fits.le_size
 
 /--
 The `USize` index `off + inc * i` of element `i < n`, in an array of `USize` size, doesn't wrap
@@ -101,17 +92,8 @@ around.
 -/
 public theorem toNat_index (x : Vec n) (hs : x.data.size < USize.size) {i : USize}
     (h : i.toNat < n) :
-    (x.off.toUSize + x.inc.toUSize * i).toNat = x.off + x.inc * i.toNat := by
-  have h₁ := x.index_lt h
-  have ho : x.off.toUSize.toNat = x.off := by simp [Nat.mod_eq_of_lt (show x.off < USize.size by lia)]
-  rcases Nat.eq_zero_or_pos i.toNat with h₀ | h₀
-  · have : i = 0 := USize.toNat_inj.mp (by simpa using h₀)
-    subst this
-    simp [ho]
-  · have hinc : x.inc ≤ x.inc * i.toNat := Nat.le_mul_of_pos_right _ h₀
-    have hc : x.inc.toUSize.toNat = x.inc := by
-      simp [Nat.mod_eq_of_lt (show x.inc < USize.size by lia)]
-    rw [USize.toNat_add_mul_of_lt (by rw [ho, hc]; lia), ho, hc]
+    (x.off.toUSize + x.inc.toUSize * i).toNat = x.off + x.inc * i.toNat :=
+  Stride.toNat_idx_toUSize x.fits hs h
 
 /--
 The `USize` index of element `j + 1 + k < n`, as the step `k` from the offset of element `j + 1`,
@@ -128,8 +110,8 @@ public theorem toNat_index_shift (x : Vec n) (hs : x.data.size < USize.size) {j 
 
 /-- The `USize` index of element `i < n` is in the array. -/
 public theorem toNat_index_lt (x : Vec n) (hs : x.data.size < USize.size) {i : USize}
-    (h : i.toNat < n) : (x.off.toUSize + x.inc.toUSize * i).toNat < x.data.size := by
-  rw [x.toNat_index hs h]; exact x.index_lt h
+    (h : i.toNat < n) : (x.off.toUSize + x.inc.toUSize * i).toNat < x.data.size :=
+  Stride.toNat_idx_toUSize_lt x.fits hs h
 
 public instance : GetElem (Vec n) Nat Float fun _ i => i < n where
   getElem x i h := x.data[x.off + x.inc * i]'(x.index_lt h)
@@ -176,8 +158,7 @@ The vector of `n` elements of `a` from the index `off` with the stride `inc`, if
 and the stride is positive or `n ≤ 1`.
 -/
 public def ofStride? (a : Float64Array) (off inc : Nat) : Option (Vec n) :=
-  if h : (0 < inc ∨ n ≤ 1) ∧ (n = 0 ∨ off + inc * (n - 1) < a.size) then
-    some ⟨a, off, inc, h.1, h.2⟩
+  if h : (Stride.mk off inc).Fits n a.size then some ⟨a, off, inc, h.inc_pos, h.idx_last_lt⟩
   else none
 
 /-- The contiguous vector with the elements `f i`. -/
