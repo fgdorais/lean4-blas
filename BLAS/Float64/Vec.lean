@@ -40,22 +40,21 @@ public structure Vec (n : Nat) where
   /-- The array that holds the elements. -/
   data : Float64Array
   /-- The index of the first element. -/
-  off : USize
+  off : Nat
   /-- The distance between two consecutive elements. -/
-  inc : USize
+  inc : Nat
   /-- The stride is positive, unless the vector has at most one element. -/
-  inc_pos : 0 < inc.toNat ∨ n ≤ 1
+  inc_pos : 0 < inc ∨ n ≤ 1
   /-- The last element is in the array. -/
-  bound : n = 0 ∨ off.toNat + inc.toNat * (n - 1) < data.size
+  bound : n = 0 ∨ off + inc * (n - 1) < data.size
 
 namespace Vec
 
 variable {n : Nat}
 
 /-- The index `off + inc * i` of element `i < n` is in the array. -/
-public theorem index_lt (x : Vec n) {i : Nat} (h : i < n) :
-    x.off.toNat + x.inc.toNat * i < x.data.size := by
-  have : x.inc.toNat * i ≤ x.inc.toNat * (n - 1) := Nat.mul_le_mul_left _ (by omega)
+public theorem index_lt (x : Vec n) {i : Nat} (h : i < n) : x.off + x.inc * i < x.data.size := by
+  have : x.inc * i ≤ x.inc * (n - 1) := Nat.mul_le_mul_left _ (by omega)
   rcases x.bound with h' | h' <;> omega
 
 /-- A vector has at most as many elements as its array. -/
@@ -64,41 +63,58 @@ public theorem le_size (x : Vec n) : n ≤ x.data.size := by
   · rcases Nat.lt_or_ge n 1 with h' | h'
     · omega
     · have := x.index_lt (i := 0) (by omega); omega
-  · have hinc : 0 < x.inc.toNat := by rcases x.inc_pos with h' | h' <;> omega
-    have : n - 1 ≤ x.inc.toNat * (n - 1) := Nat.le_mul_of_pos_left _ hinc
+  · have hinc : 0 < x.inc := by rcases x.inc_pos with h' | h' <;> omega
+    have : n - 1 ≤ x.inc * (n - 1) := Nat.le_mul_of_pos_left _ hinc
     have := x.index_lt (i := n - 1) (by omega)
     omega
 
 /-- The steps `i < n` of a vector are at distinct indices: `inc > 0`, or `i = 0`. -/
-public theorem inc_pos_of_lt (x : Vec n) {i : Nat} (h : i < n) : 0 < x.inc.toNat ∨ i = 0 := by
+public theorem inc_pos_of_lt (x : Vec n) {i : Nat} (h : i < n) : 0 < x.inc ∨ i = 0 := by
   rcases x.inc_pos with h' | h' <;> omega
 
-/-- The `USize` index of element `i < n`, in an array of `USize` size, doesn't wrap around. -/
+/--
+The `USize` index `off + inc * i` of element `i < n`, in an array of `USize` size, doesn't wrap
+around.
+-/
 public theorem toNat_index (x : Vec n) (hs : x.data.size < USize.size) {i : USize}
-    (h : i.toNat < n) : (x.off + x.inc * i).toNat = x.off.toNat + x.inc.toNat * i.toNat :=
-  USize.toNat_add_mul_of_lt (by have := x.index_lt h; omega)
+    (h : i.toNat < n) :
+    (x.off.toUSize + x.inc.toUSize * i).toNat = x.off + x.inc * i.toNat := by
+  have h₁ := x.index_lt h
+  have ho : x.off.toUSize.toNat = x.off := by simp [Nat.mod_eq_of_lt (show x.off < USize.size by omega)]
+  rcases Nat.eq_zero_or_pos i.toNat with h₀ | h₀
+  · have : i = 0 := USize.toNat_inj.mp (by simpa using h₀)
+    subst this
+    simp [ho]
+  · have hinc : x.inc ≤ x.inc * i.toNat := Nat.le_mul_of_pos_right _ h₀
+    have hc : x.inc.toUSize.toNat = x.inc := by
+      simp [Nat.mod_eq_of_lt (show x.inc < USize.size by omega)]
+    rw [USize.toNat_add_mul_of_lt (by rw [ho, hc]; omega), ho, hc]
 
 /-- The `USize` index of element `i < n` is in the array. -/
 public theorem toNat_index_lt (x : Vec n) (hs : x.data.size < USize.size) {i : USize}
-    (h : i.toNat < n) : (x.off + x.inc * i).toNat < x.data.size := by
+    (h : i.toNat < n) : (x.off.toUSize + x.inc.toUSize * i).toNat < x.data.size := by
   rw [x.toNat_index hs h]; exact x.index_lt h
 
 public instance : GetElem (Vec n) Nat Float fun _ i => i < n where
-  getElem x i h := x.data[x.off.toNat + x.inc.toNat * i]'(x.index_lt h)
+  getElem x i h := x.data[x.off + x.inc * i]'(x.index_lt h)
 
 public theorem getElem_def (x : Vec n) (i : Nat) (h : i < n) :
-    x[i] = x.data[x.off.toNat + x.inc.toNat * i]'(x.index_lt h) := rfl
+    x[i] = x.data[x.off + x.inc * i]'(x.index_lt h) := rfl
 
 /--
 The element at the `USize` index `i`, in a vector whose array has a `USize` size, as every array
-in memory does. It compiles to an inline load.
+in memory does, given its offset `o` and stride `c` as `USize`s. It compiles to an inline load. A
+loop computes `o` and `c` once, before it starts, rather than at each step.
 -/
-@[inline] public def uget (x : Vec n) (hs : x.data.size < USize.size) (i : USize)
-    (h : i.toNat < n) : Float :=
-  x.data.uget (x.off + x.inc * i) (x.toNat_index_lt hs h)
+@[inline] public def uget (x : Vec n) (o c : USize) (ho : x.off.toUSize = o)
+    (hc : x.inc.toUSize = c) (hs : x.data.size < USize.size) (i : USize) (h : i.toNat < n) :
+    Float :=
+  x.data.uget (o + c * i) (by rw [← ho, ← hc]; exact x.toNat_index_lt hs h)
 
-@[simp] public theorem uget_eq_getElem (x : Vec n) (hs : x.data.size < USize.size) (i : USize)
-    (h : i.toNat < n) : x.uget hs i h = x[i.toNat] := by
+@[simp] public theorem uget_eq_getElem (x : Vec n) (o c : USize) (ho : x.off.toUSize = o)
+    (hc : x.inc.toUSize = c) (hs : x.data.size < USize.size) (i : USize) (h : i.toNat < n) :
+    x.uget o c ho hc hs i h = x[i.toNat] := by
+  subst ho hc
   simp only [uget, Float64Array.uget_eq_getElem, getElem_def, x.toNat_index hs h]
 
 /-- The contiguous vector of the elements of `a`, from the index `0`. -/
@@ -106,11 +122,11 @@ in memory does. It compiles to an inline load.
   data := a
   off := 0
   inc := 1
-  inc_pos := Or.inl (by simp)
+  inc_pos := Or.inl (by decide)
   bound := by
     rcases Nat.eq_zero_or_pos n with h' | h'
     · exact Or.inl h'
-    · exact Or.inr (by simp; omega)
+    · exact Or.inr (by omega)
 
 @[simp] public theorem data_ofArray (a : Float64Array) (h : a.size = n) : (ofArray a h).data = a :=
   rfl
@@ -123,8 +139,8 @@ in memory does. It compiles to an inline load.
 The vector of `n` elements of `a` from the index `off` with the stride `inc`, if they are in `a`
 and the stride is positive or `n ≤ 1`.
 -/
-public def ofStride? (a : Float64Array) (off inc : USize) : Option (Vec n) :=
-  if h : (0 < inc.toNat ∨ n ≤ 1) ∧ (n = 0 ∨ off.toNat + inc.toNat * (n - 1) < a.size) then
+public def ofStride? (a : Float64Array) (off inc : Nat) : Option (Vec n) :=
+  if h : (0 < inc ∨ n ≤ 1) ∧ (n = 0 ∨ off + inc * (n - 1) < a.size) then
     some ⟨a, off, inc, h.1, h.2⟩
   else none
 

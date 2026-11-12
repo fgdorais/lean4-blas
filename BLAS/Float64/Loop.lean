@@ -455,13 +455,13 @@ theorem mapStride_set (a : Float64Array) (off inc lo hi : Nat) (g : Nat → Floa
 Runs a loop that replaces each element `a[off + inc * j]`, for `j₀ ≤ j < hi`, with
 `g j a[off + inc * j]`, and then runs `k`. It is the loop of
 `for j in 0...hi do a[off + inc * j] := e`, from step `j₀`, for a term `e` that reads only
-`a[off + inc * j]`. The indices must not wrap around, and must be distinct: `inc > 0`, or the loop
-has at most one step.
+`a[off + inc * j]`. The index `off + inc * j` is `OFF + INC * j` as a `Nat`, and the indices are
+distinct: `INC > 0`, or the loop has at most one step.
 -/
 public theorem run_forInFrom_stride {n : Nat} {γ : Type} (hi j₀ : USize)
-    (hlo : (0 : USize).toNat ≤ j₀.toNat) (off inc : USize)
-    (hinc : 0 < inc.toNat ∨ hi.toNat ≤ 1)
-    (hix : ∀ j : USize, j.toNat < hi.toNat → (off + inc * j).toNat = off.toNat + inc.toNat * j.toNat)
+    (hlo : (0 : USize).toNat ≤ j₀.toNat) (off inc : USize) (OFF INC : Nat)
+    (hinc : 0 < INC ∨ hi.toNat ≤ 1)
+    (hix : ∀ j : USize, j.toNat < hi.toNat → (off + inc * j).toNat = OFF + INC * j.toNat)
     (g : (j : USize) → j.toNat < hi.toNat → Float → Float) (G : Nat → Float → Float)
     (hg : ∀ j hj v, g j hj v = G j.toNat v)
     (p : ∀ j : USize, j.toNat < hi.toNat → (off + inc * j).toNat < n) (k : Unit → Tail n γ)
@@ -469,7 +469,7 @@ public theorem run_forInFrom_stride {n : Nat} {γ : Type} (hi j₀ : USize)
     (Tail.forInFrom 0 hi j₀ hlo ()
         (fun j _ hj next _ => Tail.readThen (off + inc * j) (p j hj) fun v =>
           Tail.writeThen (off + inc * j) (p j hj) (g j hj v) (next ())) k).run a h =
-      (k ()).run (mapStride a off.toNat inc.toNat j₀.toNat hi.toNat G) (by simp [h]) := by
+      (k ()).run (mapStride a OFF INC j₀.toNat hi.toNat G) (by simp [h]) := by
   obtain ⟨d, hd⟩ : ∃ d, hi.toNat - j₀.toNat = d := ⟨_, rfl⟩
   induction d generalizing j₀ a with
   | zero =>
@@ -491,7 +491,7 @@ public theorem run_forInFrom_stride {n : Nat} {γ : Type} (hi j₀ : USize)
     congr 1
     have hq := p j₀ hj'
     have e := hix j₀ hj'
-    have hq' : off.toNat + inc.toNat * j₀.toNat < a.size := by rw [h, ← e]; exact hq
+    have hq' : OFF + INC * j₀.toNat < a.size := by rw [h, ← e]; exact hq
     rw [hsucc, ← mapStride_set a _ _ _ _ G hj' hinc hq']
     congr 1
     simp only [e]
@@ -501,19 +501,19 @@ public theorem run_forInFrom_stride {n : Nat} {γ : Type} (hi j₀ : USize)
 /--
 Runs a loop that writes `g j` at each index `off + inc * j`, for `j₀ ≤ j < hi`, and then runs
 `k`: the loop of `for j in 0...hi do a[off + inc * j] := e`, for a term `e` that reads no element
-of `a`. The indices must not wrap around, and must be distinct.
+of `a`. The index `off + inc * j` is `OFF + INC * j` as a `Nat`, and the indices are distinct.
 -/
 public theorem run_forInFrom_stride_write {n : Nat} {γ : Type} (hi j₀ : USize)
-    (hlo : (0 : USize).toNat ≤ j₀.toNat) (off inc : USize)
-    (hinc : 0 < inc.toNat ∨ hi.toNat ≤ 1)
-    (hix : ∀ j : USize, j.toNat < hi.toNat → (off + inc * j).toNat = off.toNat + inc.toNat * j.toNat)
+    (hlo : (0 : USize).toNat ≤ j₀.toNat) (off inc : USize) (OFF INC : Nat)
+    (hinc : 0 < INC ∨ hi.toNat ≤ 1)
+    (hix : ∀ j : USize, j.toNat < hi.toNat → (off + inc * j).toNat = OFF + INC * j.toNat)
     (g : (j : USize) → j.toNat < hi.toNat → Float) (G : Nat → Float)
     (hg : ∀ j hj, g j hj = G j.toNat)
     (p : ∀ j : USize, j.toNat < hi.toNat → (off + inc * j).toNat < n) (k : Unit → Tail n γ)
     (a : Float64Array) (h : a.size = n) :
     (Tail.forInFrom 0 hi j₀ hlo ()
         (fun j _ hj next _ => Tail.writeThen (off + inc * j) (p j hj) (g j hj) (next ())) k).run a h =
-      (k ()).run (mapStride a off.toNat inc.toNat j₀.toNat hi.toNat fun i _ => G i)
+      (k ()).run (mapStride a OFF INC j₀.toNat hi.toNat fun i _ => G i)
         (by simp [h]) := by
   obtain ⟨d, hd⟩ : ∃ d, hi.toNat - j₀.toNat = d := ⟨_, rfl⟩
   induction d generalizing j₀ a with
@@ -536,7 +536,7 @@ public theorem run_forInFrom_stride_write {n : Nat} {γ : Type} (hi j₀ : USize
     congr 1
     have hq := p j₀ hj'
     have e := hix j₀ hj'
-    have hq' : off.toNat + inc.toNat * j₀.toNat < a.size := by rw [h, ← e]; exact hq
+    have hq' : OFF + INC * j₀.toNat < a.size := by rw [h, ← e]; exact hq
     rw [hsucc, ← mapStride_set a _ _ _ _ (fun i _ => G i) hj' hinc hq']
     congr 1
     simp only [e]

@@ -33,12 +33,12 @@ A vector `v` whose array is the array of `w` with the element `i` mapped by `g i
 indices, has the elements `g i w[i]`.
 -/
 public theorem getElem_of_data_eq_mapStride {v w : Vec n} (g : Nat → Float → Float)
-    (hd : v.data = mapStride w.data w.off.toNat w.inc.toNat 0 n g) (ho : v.off = w.off)
+    (hd : v.data = mapStride w.data w.off w.inc 0 n g) (ho : v.off = w.off)
     (hc : v.inc = w.inc) (i : Nat) (h : i < n) : v[i] = g i w[i] := by
   simp only [getElem_def]
   have hq := w.index_lt h
-  have e : v.data[v.off.toNat + v.inc.toNat * i]'(v.index_lt h) =
-      (mapStride w.data w.off.toNat w.inc.toNat 0 n g)[w.off.toNat + w.inc.toNat * i]'(by
+  have e : v.data[v.off + v.inc * i]'(v.index_lt h) =
+      (mapStride w.data w.off w.inc 0 n g)[w.off + w.inc * i]'(by
         simpa using hq) := by
     simp only [hd, ho, hc]
   rw [e, getElem_mapStride_stride _ _ _ _ _ _ ⟨Nat.zero_le _, h⟩ (w.inc_pos_of_lt h) hq]
@@ -50,9 +50,9 @@ public theorem toNat_toUSize (x : Vec n) (hs : x.data.size < USize.size) : n.toU
 
 /-- The loop of a vector update from the step `0`: its indices are distinct and don't wrap. -/
 public theorem loop_facts (x : Vec n) (hs : x.data.size < USize.size) :
-    (0 < x.inc.toNat ∨ n.toUSize.toNat ≤ 1) ∧
+    (0 < x.inc ∨ n.toUSize.toNat ≤ 1) ∧
       ∀ j : USize, j.toNat < n.toUSize.toNat →
-        (x.off + x.inc * j).toNat = x.off.toNat + x.inc.toNat * j.toNat := by
+        (x.off.toUSize + x.inc.toUSize * j).toNat = x.off + x.inc * j.toNat := by
   rw [x.toNat_toUSize hs]
   exact ⟨x.inc_pos, fun j hj => x.toNat_index hs hj⟩
 
@@ -62,28 +62,30 @@ public def axpyData (α : Float) (x y : Vec n) : Float64Array :=
     let nu := n.toUSize
     have hnu : nu.toNat = n := y.toNat_toUSize hs.2
     let a := y.data
-    let o := y.off
-    let c := y.inc
+    let o := y.off.toUSize
+    let c := y.inc.toUSize
+    let xo := x.off.toUSize
+    let xc := x.inc.toUSize
     (inplace a do
       for k in 0...nu do
         have hk : (o + c * k).toNat < a.size := y.toNat_index_lt hs.2 (by omega)
-        a[o + c * k] := α * x.uget hs.1 k (by omega) + a[o + c * k]).2
-  else mapStride y.data y.off.toNat y.inc.toNat 0 n fun i v => α * x.data[x.off.toNat + x.inc.toNat * i]! + v
+        a[o + c * k] := α * x.uget xo xc rfl rfl hs.1 k (by omega) + a[o + c * k]).2
+  else mapStride y.data y.off y.inc 0 n fun i v => α * x.data[x.off + x.inc * i]! + v
 
 public theorem axpyData_eq (α : Float) (x y : Vec n) :
-    axpyData α x y = mapStride y.data y.off.toNat y.inc.toNat 0 n
-      fun i v => α * x.data[x.off.toNat + x.inc.toNat * i]! + v := by
+    axpyData α x y = mapStride y.data y.off y.inc 0 n
+      fun i v => α * x.data[x.off + x.inc * i]! + v := by
   unfold axpyData
   split
   · rename_i hs
     obtain ⟨hinc, hix⟩ := y.loop_facts hs.2
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_stride (G := fun i v => α * x.data[x.off.toNat + x.inc.toNat * i]! + v)
-      (hinc := hinc) (hix := hix)]
+    rw [run_forInFrom_stride (G := fun i v => α * x.data[x.off + x.inc * i]! + v)
+      (OFF := _) (INC := _) (hinc := hinc) (hix := hix)]
     · simp only [Tail.run_done, y.toNat_toUSize hs.2, USize.toNat_zero]
     · intro j hj v
       rw [y.toNat_toUSize hs.2] at hj
-      rw [getElem!_pos x.data (x.off.toNat + x.inc.toNat * j.toNat) (x.index_lt hj)]
+      rw [getElem!_pos x.data (x.off + x.inc * j.toNat) (x.index_lt hj)]
       simp [getElem_def]
   · rfl
 
@@ -100,8 +102,8 @@ elements of the array outside `y` unchanged.
 
 /-- The array of `axpy α x y` is the array of `y` with its elements updated. -/
 public theorem data_axpy (α : Float) (x y : Vec n) :
-    (axpy α x y).data = mapStride y.data y.off.toNat y.inc.toNat 0 n
-      fun i v => α * x.data[x.off.toNat + x.inc.toNat * i]! + v :=
+    (axpy α x y).data = mapStride y.data y.off y.inc 0 n
+      fun i v => α * x.data[x.off + x.inc * i]! + v :=
   axpyData_eq α x y
 
 @[simp] public theorem off_axpy (α : Float) (x y : Vec n) : (axpy α x y).off = y.off := rfl
@@ -111,7 +113,7 @@ public theorem data_axpy (α : Float) (x y : Vec n) :
 @[simp] public theorem getElem_axpy (α : Float) (x y : Vec n) (i : Nat) (h : i < n) :
     (axpy α x y)[i] = α * x[i] + y[i] := by
   rw [getElem_of_data_eq_mapStride _ (data_axpy α x y) rfl rfl i h,
-    getElem!_pos x.data (x.off.toNat + x.inc.toNat * i) (x.index_lt h)]
+    getElem!_pos x.data (x.off + x.inc * i) (x.index_lt h)]
   rfl
 
 /-- The array of `scal`. -/
@@ -120,22 +122,22 @@ public def scalData (α : Float) (x : Vec n) : Float64Array :=
     let nu := n.toUSize
     have hnu : nu.toNat = n := x.toNat_toUSize hs
     let a := x.data
-    let o := x.off
-    let c := x.inc
+    let o := x.off.toUSize
+    let c := x.inc.toUSize
     (inplace a do
       for k in 0...nu do
         have hk : (o + c * k).toNat < a.size := x.toNat_index_lt hs (by omega)
         a[o + c * k] := α * a[o + c * k]).2
-  else mapStride x.data x.off.toNat x.inc.toNat 0 n fun _ v => α * v
+  else mapStride x.data x.off x.inc 0 n fun _ v => α * v
 
 public theorem scalData_eq (α : Float) (x : Vec n) :
-    scalData α x = mapStride x.data x.off.toNat x.inc.toNat 0 n fun _ v => α * v := by
+    scalData α x = mapStride x.data x.off x.inc 0 n fun _ v => α * v := by
   unfold scalData
   split
   · rename_i hs
     obtain ⟨hinc, hix⟩ := x.loop_facts hs
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_stride (G := fun _ v => α * v) (hinc := hinc) (hix := hix)]
+    rw [run_forInFrom_stride (G := fun _ v => α * v) (OFF := _) (INC := _) (hinc := hinc) (hix := hix)]
     · simp only [Tail.run_done, x.toNat_toUSize hs, USize.toNat_zero]
     · intro _ _ _; rfl
   · rfl
@@ -153,7 +155,7 @@ elements of the array outside `x` unchanged.
 
 /-- The array of `scal α x` is the array of `x` with its elements updated. -/
 public theorem data_scal (α : Float) (x : Vec n) :
-    (scal α x).data = mapStride x.data x.off.toNat x.inc.toNat 0 n fun _ v => α * v :=
+    (scal α x).data = mapStride x.data x.off x.inc 0 n fun _ v => α * v :=
   scalData_eq α x
 
 @[simp] public theorem off_scal (α : Float) (x : Vec n) : (scal α x).off = x.off := rfl
@@ -169,26 +171,28 @@ The array of `copy`: a single `memmove` for contiguous vectors, and a loop over 
 otherwise.
 -/
 public def copyData (x y : Vec n) : Float64Array :=
-  if x.inc = 1 ∧ y.inc = 1 then x.data.copySlice x.off.toNat y.data y.off.toNat n
+  if x.inc = 1 ∧ y.inc = 1 then x.data.copySlice x.off y.data y.off n
   else if hs : x.data.size < USize.size ∧ y.data.size < USize.size then
     let nu := n.toUSize
     have hnu : nu.toNat = n := y.toNat_toUSize hs.2
     let a := y.data
-    let o := y.off
-    let c := y.inc
+    let o := y.off.toUSize
+    let c := y.inc.toUSize
+    let xo := x.off.toUSize
+    let xc := x.inc.toUSize
     (inplace a do
       for k in 0...nu do
         have hk : (o + c * k).toNat < a.size := y.toNat_index_lt hs.2 (by omega)
-        a[o + c * k] := x.uget hs.1 k (by omega)).2
-  else mapStride y.data y.off.toNat y.inc.toNat 0 n fun i _ => x.data[x.off.toNat + x.inc.toNat * i]!
+        a[o + c * k] := x.uget xo xc rfl rfl hs.1 k (by omega)).2
+  else mapStride y.data y.off y.inc 0 n fun i _ => x.data[x.off + x.inc * i]!
 
 public theorem copyData_eq (x y : Vec n) :
-    copyData x y = mapStride y.data y.off.toNat y.inc.toNat 0 n
-      fun i _ => x.data[x.off.toNat + x.inc.toNat * i]! := by
+    copyData x y = mapStride y.data y.off y.inc 0 n
+      fun i _ => x.data[x.off + x.inc * i]! := by
   unfold copyData
   split
   · rename_i hc
-    have hw : ∀ v : Vec n, v.inc = 1 → n = 0 ∨ v.off.toNat + n ≤ v.data.size := by
+    have hw : ∀ v : Vec n, v.inc = 1 → n = 0 ∨ v.off + n ≤ v.data.size := by
       intro v h
       rcases Nat.eq_zero_or_pos n with h' | h'
       · omega
@@ -199,12 +203,12 @@ public theorem copyData_eq (x y : Vec n) :
   · rename_i hs
     obtain ⟨hinc, hix⟩ := y.loop_facts hs.2
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_stride_write (G := fun i => x.data[x.off.toNat + x.inc.toNat * i]!)
-      (hinc := hinc) (hix := hix)]
+    rw [run_forInFrom_stride_write (G := fun i => x.data[x.off + x.inc * i]!)
+      (OFF := _) (INC := _) (hinc := hinc) (hix := hix)]
     · simp only [Tail.run_done, y.toNat_toUSize hs.2, USize.toNat_zero]
     · intro j hj
       rw [y.toNat_toUSize hs.2] at hj
-      rw [getElem!_pos x.data (x.off.toNat + x.inc.toNat * j.toNat) (x.index_lt hj)]
+      rw [getElem!_pos x.data (x.off + x.inc * j.toNat) (x.index_lt hj)]
       simp [getElem_def]
   · rfl
 
@@ -221,8 +225,8 @@ elements of the array outside `y` unchanged.
 
 /-- The array of `copy x y` is the array of `y` with its elements replaced. -/
 public theorem data_copy (x y : Vec n) :
-    (copy x y).data = mapStride y.data y.off.toNat y.inc.toNat 0 n
-      fun i _ => x.data[x.off.toNat + x.inc.toNat * i]! :=
+    (copy x y).data = mapStride y.data y.off y.inc 0 n
+      fun i _ => x.data[x.off + x.inc * i]! :=
   copyData_eq x y
 
 @[simp] public theorem off_copy (x y : Vec n) : (copy x y).off = y.off := rfl
@@ -232,7 +236,7 @@ public theorem data_copy (x y : Vec n) :
 @[simp] public theorem getElem_copy (x y : Vec n) (i : Nat) (h : i < n) :
     (copy x y)[i] = x[i] := by
   rw [getElem_of_data_eq_mapStride _ (data_copy x y) rfl rfl i h,
-    getElem!_pos x.data (x.off.toNat + x.inc.toNat * i) (x.index_lt h)]
+    getElem!_pos x.data (x.off + x.inc * i) (x.index_lt h)]
   rfl
 
 /-- `swap x y` is `(y, x)`. Nothing is copied. -/
@@ -245,8 +249,12 @@ public def swap (x y : Vec n) : Vec n × Vec n := (y, x)
 /-- The dot product `x[0] * y[0] + … + x[n - 1] * y[n - 1]`, summed from the left. -/
 public def dot (x y : Vec n) : Float :=
   if hs : x.data.size < USize.size ∧ y.data.size < USize.size then
+    let xo := x.off.toUSize
+    let xc := x.inc.toUSize
+    let yo := y.off.toUSize
+    let yc := y.inc.toUSize
     foldUpTo n (fun i h s => s + x[i] * y[i])
-      (fun i h s => s + x.uget hs.1 i h * y.uget hs.2 i h) 0
+      (fun i h s => s + x.uget xo xc rfl rfl hs.1 i h * y.uget yo yc rfl rfl hs.2 i h) 0
   else Nat.fold n (fun i h s => s + x[i] * y[i]) 0
 
 public theorem dot_eq (x y : Vec n) :
@@ -258,7 +266,9 @@ public theorem dot_eq (x y : Vec n) :
 /-- The sum of the absolute values `|x[0]| + … + |x[n - 1]|`, summed from the left. -/
 public def asum (x : Vec n) : Float :=
   if hs : x.data.size < USize.size then
-    foldUpTo n (fun i h s => s + x[i].abs) (fun i h s => s + (x.uget hs i h).abs) 0
+    let xo := x.off.toUSize
+    let xc := x.inc.toUSize
+    foldUpTo n (fun i h s => s + x[i].abs) (fun i h s => s + (x.uget xo xc rfl rfl hs i h).abs) 0
   else Nat.fold n (fun i h s => s + x[i].abs) 0
 
 public theorem asum_eq (x : Vec n) :
@@ -273,14 +283,17 @@ reference BLAS, it doesn't scale the elements, so the sum may overflow or underf
 -/
 public def nrm2 (x : Vec n) : Float :=
   if hs : x.data.size < USize.size then
+    let xo := x.off.toUSize
+    let xc := x.inc.toUSize
     (foldUpTo n (fun i h s => s + x[i] * x[i])
-      (fun i h s => s + x.uget hs i h * x.uget hs i h) 0).sqrt
+      (fun i h s => s + x.uget xo xc rfl rfl hs i h * x.uget xo xc rfl rfl hs i h) 0).sqrt
   else (Nat.fold n (fun i h s => s + x[i] * x[i]) 0).sqrt
 
 public theorem nrm2_eq (x : Vec n) :
     nrm2 x = (Nat.fold n (fun i h s => s + x[i] * x[i]) 0).sqrt := by
   unfold nrm2; split
-  · rw [foldUpTo_eq _ _ _ (by simp)]
+  · simp only []
+    rw [foldUpTo_eq _ _ _ (by simp)]
   · rfl
 
 /-- One step of `iamax`: the index and absolute value of the first largest element so far. -/
@@ -294,10 +307,12 @@ The loop of `iamax` from the index `i`, up to the bound `m`, which is `n`, with 
 absolute value `a` of the first largest element so far. It keeps them in two loop variables rather
 than a pair, which would be allocated at every new largest element.
 -/
-public def iamaxLoop (x : Vec n) (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float) : Nat :=
+public def iamaxLoop (x : Vec n) (o c : USize) (ho : x.off.toUSize = o) (hc : x.inc.toUSize = c)
+    (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float) : Nat :=
   if hi : i < m then
-    let b := (x.uget hs i (hm ▸ hi)).abs
-    if i = 0 ∨ b > a then iamaxLoop x hs m hm (i + 1) i b else iamaxLoop x hs m hm (i + 1) k a
+    let b := (x.uget o c ho hc hs i (hm ▸ hi)).abs
+    if i = 0 ∨ b > a then iamaxLoop x o c ho hc hs m hm (i + 1) i b
+    else iamaxLoop x o c ho hc hs m hm (i + 1) k a
   else k.toNat
 termination_by m.toNat - i.toNat
 decreasing_by
@@ -308,10 +323,11 @@ decreasing_by
     rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by omega)]
     omega
 
-private theorem iamaxLoop_eq (x : Vec n) (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float)
+private theorem iamaxLoop_eq (x : Vec n) (o c : USize) (ho : x.off.toUSize = o)
+    (hc : x.inc.toUSize = c) (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float)
     (j : Nat) (hj : i.toNat = j) (hjn : j ≤ n)
     (hacc : Nat.fold j (fun l hl => iamaxStep x l (by omega)) (0, 0) = (k.toNat, a)) :
-    iamaxLoop x hs m hm i k a = (Nat.fold n (iamaxStep x) (0, 0)).1 := by
+    iamaxLoop x o c ho hc hs m hm i k a = (Nat.fold n (iamaxStep x) (0, 0)).1 := by
   obtain ⟨d, hd⟩ : ∃ d, n - j = d := ⟨_, rfl⟩
   induction d generalizing i k a j with
   | zero =>
@@ -348,13 +364,13 @@ The index of the first element of largest absolute value, or `0` for the empty v
 reference BLAS, a `NaN` is never larger, unless it is the first element.
 -/
 public def iamax (x : Vec n) : Nat :=
-  if hs : x.data.size < USize.size then iamaxLoop x hs n.toUSize (x.toNat_toUSize hs) 0 0 0
+  if hs : x.data.size < USize.size then iamaxLoop x _ _ rfl rfl hs n.toUSize (x.toNat_toUSize hs) 0 0 0
   else (Nat.fold n (iamaxStep x) (0, 0)).1
 
 public theorem iamax_eq (x : Vec n) : iamax x = (Nat.fold n (iamaxStep x) (0, 0)).1 := by
   unfold iamax
   split
-  · exact iamaxLoop_eq x _ _ _ 0 0 0 0 (by simp) (by omega) (by simp)
+  · exact iamaxLoop_eq x _ _ rfl rfl _ _ _ 0 0 0 0 (by simp) (by omega) (by simp)
   · rfl
 
 end Vec

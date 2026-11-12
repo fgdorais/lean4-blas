@@ -131,7 +131,7 @@ other elements are `-1`.
 def strided (n off inc : Nat) (c : Float := 1) : Vec n :=
   let a := ScalarArray.Float64Array.ofFn (n := off + inc * n) fun p =>
     if off ≤ p.val ∧ (p.val - off) % inc = 0 then c * ((p.val - off) / inc).toFloat else -1
-  (Vec.ofStride? a off.toUSize inc.toUSize).getD (.ofFn fun _ => 0 / 0)
+  (Vec.ofStride? a off inc).getD (.ofFn fun _ => 0 / 0)
 
 /-- The number of elements `-1` in the array of `x`: those outside a strided vector. -/
 def outside (x : Vec n) : Nat := x.data.toList.countP (· == -1)
