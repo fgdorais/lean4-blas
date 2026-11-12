@@ -7,6 +7,7 @@ module
 public import BLAS.Float64.PMat
 public import BLAS.Float64.Loop
 public import ScalarArray.InPlaceSyntax
+import all BLAS.Internal
 
 /-!
 # Level 3
