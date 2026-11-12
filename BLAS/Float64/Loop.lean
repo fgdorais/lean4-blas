@@ -5,12 +5,13 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import ScalarArray
+public import BLAS.Internal
 
 /-!
 # Specifications of loops
 
 What the kernels need beyond scalar-arrays' models of loops: `foldUpTo`, a reduction over `USize`
-indices, a few `USize` and element lemmas, the elements of `iterRange` loops over contiguous
+indices, a few element lemmas, the elements of `iterRange` loops over contiguous
 windows, which the `gemm` kernels use, and the algebra of `modifyAt` at the indices of a stride.
 
 scalar-arrays gives the models of loops, `iterRange` and `Float64Array.modifyAt`, the
@@ -81,19 +82,7 @@ public theorem foldUpTo_eq {β : Type u} (n : Nat) (f : (i : Nat) → i < n → 
   · simpa using foldUpTo_loop_eq n f fu hf _ _ 0 0 (by simp) (by lia) init
   · rfl
 
-/-! ## Indices -/
-
-/-- `(x + y).toNat = x.toNat + y.toNat` when the sum doesn't wrap around. -/
-public theorem USize.toNat_add_of_lt {x y : USize} (h : x.toNat + y.toNat < USize.size) :
-    (x + y).toNat = x.toNat + y.toNat := by
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  rw [USize.toNat_add, Nat.mod_eq_of_lt (by lia)]
-
-/-- `(x * y).toNat = x.toNat * y.toNat` when the product doesn't wrap around. -/
-public theorem USize.toNat_mul_of_lt {x y : USize} (h : x.toNat * y.toNat < USize.size) :
-    (x * y).toNat = x.toNat * y.toNat := by
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  rw [USize.toNat_mul, Nat.mod_eq_of_lt (by lia)]
+/-! ## Elements -/
 
 /-- A program that writes `v` at a `USize` index runs as one that writes it with `set!`. -/
 public theorem Tail.run_set_eq_set! {N : Nat} {γ : Type} (t : InPlace.Tail N γ) (a : Float64Array)

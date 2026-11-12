@@ -130,7 +130,7 @@ structure GemmSizes (m : USize) (a b c : Float64Array) : Prop where
 /-- Column `j < m` of an `m × m` matrix fits in an array of `m * m` elements. -/
 theorem col_le {m j : USize} {a b c : Float64Array} (h : GemmSizes m a b c) (hj : j < m) :
     (m * j).toNat + m.toNat ≤ a.size :=
-  BLAS.Float64.toNat_mul_add_le (n := m.toNat) (USize.lt_iff_toNat_lt.mp hj) (by rw [h.ha]; exact Nat.le_refl _) h.hs
+  BLAS.toNat_mul_add_le (n := m.toNat) (USize.lt_iff_toNat_lt.mp hj) (by rw [h.ha]; exact Nat.le_refl _) h.hs
 
 /-- The element `off + i` of a column at `off`, for `i < m`. -/
 theorem idx_lt {m off i : USize} {p : Nat} (hw : off.toNat + m.toNat ≤ p) (hi : i < m) :

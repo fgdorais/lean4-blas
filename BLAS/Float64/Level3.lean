@@ -18,15 +18,6 @@ open ScalarArray Float64Array InPlace
 
 namespace BLAS.Float64
 
-/-- `(m * j).toNat + m.toNat ≤ p` for `j < n` and `m * n ≤ p < USize.size`: column `j` fits. -/
-public theorem toNat_mul_add_le {m j : USize} {n p : Nat} (hj : j.toNat < n)
-    (hmn : m.toNat * n ≤ p) (hp : p < USize.size) : (m * j).toNat + m.toNat ≤ p := by
-  have h1 : m.toNat * (j.toNat + 1) ≤ m.toNat * n := Nat.mul_le_mul_left _ hj
-  rw [Nat.mul_succ] at h1
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  rw [USize.toNat_mul, Nat.mod_eq_of_lt (by lia)]
-  lia
-
 /-- The elements of column `j` of an `m × n` matrix are in the window `m * j ≤ q < m * j + m`. -/
 private theorem col_window {m j' i j : Nat} (hi : i < m) :
     (m * j' ≤ i + m * j ∧ i + m * j < m * j' + m) ↔ j' = j := by
@@ -39,14 +30,6 @@ private theorem col_window {m j' i j : Nat} (hi : i < m) :
     · have : m * (j + 1) ≤ m * j' := Nat.mul_le_mul_left m h
       rw [Nat.mul_succ] at this; lia
   · rintro rfl; lia
-
-/-- The index `x * y + i` of an element of a column, as a `Nat`. -/
-private theorem toNat_mul_add {x y i : USize} {X Y : Nat} (hx : x.toNat = X) (hi : i.toNat < X)
-    (hy : y.toNat < Y) (hs : X * Y < USize.size) : (x * y + i).toNat = X * y.toNat + i.toNat := by
-  have := PMat.index_lt hi hy
-  have hxy : (x * y).toNat = X * y.toNat := by
-    rw [USize.toNat_mul_of_lt (by rw [hx]; lia), hx]
-  rw [USize.toNat_add_of_lt (by rw [hxy]; lia), hxy]
 
 namespace PMat
 
@@ -210,10 +193,10 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
             rw [hmu] at hi
             simp only [Tail.run_readThen, Tail.run_writeThen]
             apply Tail.run_set_eq_set!
-            · exact toNat_mul_add hmu hi hj hs.1
-            · have h1 := toNat_mul_add hmu hi hj hs.1
-              have h2 := toNat_mul_add hku hl hj hs.2.2.1
-              have h3 := toNat_mul_add hmu hi hl hs.2.1
+            · exact toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
+            · have h1 := toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
+              have h2 := toNat_mul_add_eq hku hj (Nat.le_of_lt hl) hs.2.2.1
+              have h3 := toNat_mul_add_eq hmu hl (Nat.le_of_lt hi) hs.2.1
               have := index_lt hi hj
               have := index_lt hi hl
               have := index_lt hl hj
@@ -224,8 +207,8 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
         rw [hmu] at hi
         simp only [Tail.run_readThen, Tail.run_writeThen]
         apply Tail.run_set_eq_set!
-        · exact toNat_mul_add hmu hi hj hs.1
-        · have h1 := toNat_mul_add hmu hi hj hs.1
+        · exact toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
+        · have h1 := toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
           have := index_lt hi hj
           simp only [h1]
           rw [getElem!_pos a' _ (by lia)]
