@@ -61,21 +61,8 @@ around.
 public theorem toNat_index (A : Mat m n) (hs : A.data.size < USize.size) {i j : USize}
     (hi : i.toNat < m) (hj : j.toNat < n) :
     (A.off.toUSize + A.ld.toUSize * j + i).toNat = A.off + A.ld * j.toNat + i.toNat := by
-  have h₁ := A.index_lt hi hj
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  have ho : A.off.toUSize.toNat = A.off := by
-    simp [Nat.mod_eq_of_lt (show A.off < USize.size by lia)]
-  have hm : (A.ld.toUSize * j).toNat = A.ld * j.toNat := by
-    rcases Nat.eq_zero_or_pos j.toNat with h₀ | h₀
-    · have : j = 0 := USize.toNat_inj.mp (by simpa using h₀)
-      subst this
-      simp
-    · have hl : A.ld ≤ A.ld * j.toNat := Nat.le_mul_of_pos_right _ h₀
-      have hc : A.ld.toUSize.toNat = A.ld := by
-        simp [Nat.mod_eq_of_lt (show A.ld < USize.size by lia)]
-      rw [USize.toNat_mul, hc, Nat.mod_eq_of_lt (by lia)]
-  rw [USize.toNat_add, USize.toNat_add, ho, hm, Nat.mod_eq_of_lt (a := A.off + A.ld * j.toNat)
-    (by lia), Nat.mod_eq_of_lt (by lia)]
+  have := A.index_lt hi hj
+  grind
 
 /-- The `USize` index of an element, as the step `i` of column `j` with the stride `1`. -/
 public theorem toNat_col_index (A : Mat m n) (hs : A.data.size < USize.size) {i j : USize}
