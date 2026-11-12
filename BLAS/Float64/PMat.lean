@@ -30,7 +30,7 @@ public structure PMat (m n : Nat) where
 public theorem PMat.index_lt {m n i j : Nat} (hi : i < m) (hj : j < n) : i + m * j < m * n := by
   have : m * (j + 1) ≤ m * n := Nat.mul_le_mul_left m hj
   rw [Nat.mul_succ] at this
-  omega
+  lia
 
 namespace PMat
 
@@ -65,7 +65,7 @@ public theorem ext {A B : PMat m n} (h : ∀ i j (hij : i < m ∧ j < n), A[(i, 
   congr
   apply Float64Array.ext_getElem (by rw [ha, hb])
   intro p hpa hpb
-  have hm : 0 < m := Nat.pos_of_ne_zero fun h => by simp [h] at ha; omega
+  have hm : 0 < m := Nat.pos_of_ne_zero fun h => by simp [h] at ha; lia
   have hp : p < m * n := ha ▸ hpa
   have := h (p % m) (p / m) ⟨Nat.mod_lt _ hm, Nat.div_lt_of_lt_mul hp⟩
   simp only [getElem_def] at this

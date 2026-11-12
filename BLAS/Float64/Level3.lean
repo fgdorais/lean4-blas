@@ -24,8 +24,8 @@ public theorem toNat_mul_add_le {m j : USize} {n p : Nat} (hj : j.toNat < n)
   have h1 : m.toNat * (j.toNat + 1) ≤ m.toNat * n := Nat.mul_le_mul_left _ hj
   rw [Nat.mul_succ] at h1
   have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  rw [USize.toNat_mul, Nat.mod_eq_of_lt (by omega)]
-  omega
+  rw [USize.toNat_mul, Nat.mod_eq_of_lt (by lia)]
+  lia
 
 /-- The elements of column `j` of an `m × n` matrix are in the window `m * j ≤ q < m * j + m`. -/
 private theorem col_window {m j' i j : Nat} (hi : i < m) :
@@ -34,19 +34,19 @@ private theorem col_window {m j' i j : Nat} (hi : i < m) :
   · intro ⟨h₁, h₂⟩
     rcases Nat.lt_trichotomy j' j with h | h | h
     · have : m * (j' + 1) ≤ m * j := Nat.mul_le_mul_left m h
-      rw [Nat.mul_succ] at this; omega
+      rw [Nat.mul_succ] at this; lia
     · exact h
     · have : m * (j + 1) ≤ m * j' := Nat.mul_le_mul_left m h
-      rw [Nat.mul_succ] at this; omega
-  · rintro rfl; omega
+      rw [Nat.mul_succ] at this; lia
+  · rintro rfl; lia
 
 /-- The index `x * y + i` of an element of a column, as a `Nat`. -/
 private theorem toNat_mul_add {x y i : USize} {X Y : Nat} (hx : x.toNat = X) (hi : i.toNat < X)
     (hy : y.toNat < Y) (hs : X * Y < USize.size) : (x * y + i).toNat = X * y.toNat + i.toNat := by
   have := PMat.index_lt hi hy
   have hxy : (x * y).toNat = X * y.toNat := by
-    rw [USize.toNat_mul_of_lt (by rw [hx]; omega), hx]
-  rw [USize.toNat_add_of_lt (by rw [hxy]; omega), hxy]
+    rw [USize.toNat_mul_of_lt (by rw [hx]; lia), hx]
+  rw [USize.toNat_add_of_lt (by rw [hxy]; lia), hxy]
 
 namespace PMat
 
@@ -90,20 +90,20 @@ public def gemm (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMa
       for j in 0...nu do
         let cj := mu * j
         have hcj : cj.toNat + mu.toNat ≤ c.size :=
-          toNat_mul_add_le (n := n) (by omega) (by rw [hmu, hc]; exact Nat.le_refl _) (by rw [hc]; exact hs.1)
+          toNat_mul_add_le (n := n) (by lia) (by rw [hmu, hc]; exact Nat.le_refl _) (by rw [hc]; exact hs.1)
         for i in 0...mu do
           c[cj + i] := β * c[cj + i]
         for l in 0...ku do
           let al := mu * l
           have hal : al.toNat + mu.toNat ≤ a.size :=
-            toNat_mul_add_le (n := k) (by omega) (by rw [hmu, ha]; exact Nat.le_refl _) (by rw [ha]; exact hs.2.1)
+            toNat_mul_add_le (n := k) (by lia) (by rw [hmu, ha]; exact Nat.le_refl _) (by rw [ha]; exact hs.2.1)
           let bj := ku * j
           have hbj : bj.toNat + ku.toNat ≤ b.size :=
-            toNat_mul_add_le (n := n) (by omega) (by rw [hku, hb]; exact Nat.le_refl _) (by rw [hb]; exact hs.2.2.1)
-          let t := α * b.uget (bj + l) (InPlaceSyntax.toNat_add_lt_of_window (by omega) (by omega))
+            toNat_mul_add_le (n := n) (by lia) (by rw [hku, hb]; exact Nat.le_refl _) (by rw [hb]; exact hs.2.2.1)
+          let t := α * b.uget (bj + l) (InPlaceSyntax.toNat_add_lt_of_window hbj (by lia))
           for i in 0...mu do
             c[cj + i] := c[cj + i] +
-              t * a.uget (al + i) (InPlaceSyntax.toNat_add_lt_of_window hal (by omega))
+              t * a.uget (al + i) (InPlaceSyntax.toNat_add_lt_of_window hal (by lia))
     then fun _ c' h => ⟨c', by rw [h, hc]⟩
   else gemmModel α A B β C
 
@@ -142,15 +142,15 @@ private theorem getElem!_gemmCol (α a b β) {i j : Nat} (hi : i < m) (c : Float
     (hq : i + m * j < c.size) :
     (gemmCol m k α a b β j c)[i + m * j]! =
       Nat.fold k (fun l _ s => s + α * b[k * j + l]! * a[m * l + i]!) (β * c[i + m * j]!) := by
-  have hw : m * j + 0 ≤ i + m * j ∧ i + m * j < m * j + m := by omega
-  have hsub : i + m * j - m * j = i := by omega
+  have hw : m * j + 0 ≤ i + m * j ∧ i + m * j < m * j + m := by lia
+  have hsub : i + m * j - m * j = i := by lia
   unfold gemmCol
   rw [getElem!_iterRange_of_pointwise _ _ _ c.size
       (fun l _ s => s + α * b[k * j + l]! * a[m * l + i]!) (fun _ _ => by simp [size_iterRange])]
   · rw [getElem!_iterRange_set! (m * j) (fun _ v => β * v) _ _ _ _ hq, ite_eq_left hw]
   · intro l _ c' hc
     rw [getElem!_iterRange_set! (m * j) (fun i v => v + α * b[k * j + l]! * a[m * l + i]!)
-      _ _ _ _ (by omega), ite_eq_left hw, hsub]
+      _ _ _ _ (by lia), ite_eq_left hw, hsub]
   · simp [size_iterRange]
 
 public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) :
@@ -175,20 +175,20 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
       simp only [gemmModel, getElem_ofFn, gemmEntry]
       simp only [getElem_def, e, hnu, USize.toNat_zero]
       have hq := index_lt hij.1 hij.2
-      rw [iterRange_split _ (Nat.zero_le _) (show j + 1 ≤ n by omega), getElem!_iterRange_of_frame,
+      rw [iterRange_split _ (Nat.zero_le _) (show j + 1 ≤ n by lia), getElem!_iterRange_of_frame,
         iterRange_succ _ (Nat.zero_le _), getElem!_gemmCol _ _ _ _ hij.1 _
-          (by rw [size_iterRange _ hcol]; omega),
+          (by rw [size_iterRange _ hcol]; lia),
         getElem!_iterRange_of_frame]
       · congr
         funext l hl s
         rw [Nat.add_comm (k * j), Nat.add_comm (m * l)]
       · intro j' _ hj' c
         by_cases hc : i + m * j < c.size
-        · exact getElem!_gemmCol_of_ne _ _ _ _ hij.1 (by omega) c hc
+        · exact getElem!_gemmCol_of_ne _ _ _ _ hij.1 (by lia) c hc
         · rw [getElem!_neg c _ hc, getElem!_neg _ _ (by rw [size_gemmCol]; exact hc)]
       · intro j' hj' _ c
         by_cases hc : i + m * j < c.size
-        · exact getElem!_gemmCol_of_ne _ _ _ _ hij.1 (by omega) c hc
+        · exact getElem!_gemmCol_of_ne _ _ _ _ hij.1 (by lia) c hc
         · rw [getElem!_neg c _ hc, getElem!_neg _ _ (by rw [size_gemmCol]; exact hc)]
     · intro j _ hj next a h
       rw [hnu] at hj
@@ -218,8 +218,8 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
               have := index_lt hi hl
               have := index_lt hl hj
               simp only [Float64Array.uget_eq_getElem, h1, h2, h3]
-              rw [getElem!_pos a'' _ (by omega), getElem!_pos B.data _ (by omega),
-                getElem!_pos A.data _ (by omega)]
+              rw [getElem!_pos a'' _ (by lia), getElem!_pos B.data _ (by lia),
+                getElem!_pos A.data _ (by lia)]
       · intro i _ hi next' a' h'
         rw [hmu] at hi
         simp only [Tail.run_readThen, Tail.run_writeThen]
@@ -228,7 +228,7 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
         · have h1 := toNat_mul_add hmu hi hj hs.1
           have := index_lt hi hj
           simp only [h1]
-          rw [getElem!_pos a' _ (by omega)]
+          rw [getElem!_pos a' _ (by lia)]
   · rfl
 
 @[simp] public theorem getElem_gemm (α : Float) (A : PMat m k) (B : PMat k n) (β : Float)

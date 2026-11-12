@@ -76,7 +76,7 @@ where
       Float64Array :=
     if h : i < x.usize then
       have hx := lt_size_of_lt_usize h
-      loop hs (z.uset i (α * x.uget i hx + z.uget i (by omega)) (by omega)) (by simp [hz]) (i + 1)
+      loop hs (z.uset i (α * x.uget i hx + z.uget i (by lia)) (by lia)) (by simp [hz]) (i + 1)
     else z
 
 /-- `α * x`. -/
@@ -98,7 +98,7 @@ where
   loop (hs : x.size = y.size) (i : USize) (s : Float) : Float :=
     if h : i < x.usize then
       have hx := lt_size_of_lt_usize h
-      loop hs (i + 1) (s + x.uget i hx * y.uget i (by omega))
+      loop hs (i + 1) (s + x.uget i hx * y.uget i (by lia))
     else s
 
 /-- A sum of `f x[i]`. -/

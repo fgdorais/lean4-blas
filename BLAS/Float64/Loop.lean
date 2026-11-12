@@ -36,7 +36,7 @@ public theorem mapRange_of_le (a : Float64Array) (lo hi g) (h : hi ≤ lo) :
   intro i _ _
   simp only [mapRange, getElem_ofFn]
   split
-  · omega
+  · lia
   · rfl
 
 /--
@@ -57,12 +57,12 @@ public theorem run_forInFrom_map {n : Nat} {γ : Type} (hi j₀ : USize)
   obtain ⟨d, hd⟩ : ∃ d, hi.toNat - j₀.toNat = d := ⟨_, rfl⟩
   induction d generalizing j₀ a with
   | zero =>
-    have hj : ¬ j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    have hj : ¬ j₀ < hi := by rw [USize.lt_iff_toNat_lt]; lia
     rw [Tail.forInFrom_eq, dite_eq_right_of_eq_false (eq_false hj)]
     congr 1
-    exact (mapRange_of_le a _ _ G (by omega)).symm
+    exact (mapRange_of_le a _ _ G (by lia)).symm
   | succ d ih =>
-    have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; lia
     have hj' : j₀.toNat < hi.toNat := hj
     rw [Tail.forInFrom_eq, dite_eq_left_of_eq_true (eq_true hj)]
     simp only [Tail.run_readThen, Tail.run_writeThen]
@@ -70,8 +70,8 @@ public theorem run_forInFrom_map {n : Nat} {γ : Type} (hi j₀ : USize)
       rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt]
       have : hi.toNat < USize.size := hi.toNat_lt_size
       have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-      omega
-    rw [ih (j₀ + 1) _ _ _ (by rw [hsucc]; omega)]
+      lia
+    rw [ih (j₀ + 1) _ _ _ (by rw [hsucc]; lia)]
     congr 1
     apply ext_getElem (by simp)
     intro i _ _
@@ -81,7 +81,7 @@ public theorem run_forInFrom_map {n : Nat} {γ : Type} (hi j₀ : USize)
       simp [hj', Nat.not_succ_le_self]
       exact hg _ _ _
     · simp only [hij, ite_false]
-      split <;> split <;> first | rfl | omega
+      split <;> split <;> first | rfl | lia
 
 /-! ## Reductions -/
 
@@ -106,30 +106,30 @@ where
     rw [USize.lt_iff_toNat_lt] at hi
     have : m.toNat < USize.size := m.toNat_lt_size
     have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-    rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by omega)]
-    omega
+    rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]
+    lia
 
 private theorem foldUpTo_loop_eq {β : Type u} (n : Nat) (f : (i : Nat) → i < n → β → β)
     (fu : (i : USize) → i.toNat < n → β → β) (hf : ∀ i h b, fu i h b = f i.toNat h b)
     (m : USize) (hm : m.toNat = n) (i : USize) (k : Nat) (hk : i.toNat = k) (hkn : k ≤ n)
     (init : β) :
-    foldUpTo.loop n fu m hm i (Nat.fold k (fun j hj => f j (by omega)) init) =
+    foldUpTo.loop n fu m hm i (Nat.fold k (fun j hj => f j (by lia)) init) =
       Nat.fold n f init := by
   obtain ⟨d, hd⟩ : ∃ d, n - k = d := ⟨_, rfl⟩
   induction d generalizing i k with
   | zero =>
-    rw [foldUpTo.loop, dite_eq_right_of_eq_false (eq_false (by rw [USize.lt_iff_toNat_lt]; omega))]
-    obtain rfl : k = n := by omega
+    rw [foldUpTo.loop, dite_eq_right_of_eq_false (eq_false (by rw [USize.lt_iff_toNat_lt]; lia))]
+    obtain rfl : k = n := by lia
     rfl
   | succ d ih =>
-    have hi : i.toNat < n := by omega
+    have hi : i.toNat < n := by lia
     have hsucc : (i + 1).toNat = k + 1 := by
       have : m.toNat < USize.size := m.toNat_lt_size
       have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by omega), hk]
-    rw [foldUpTo.loop, dite_eq_left_of_eq_true (eq_true (by rw [USize.lt_iff_toNat_lt]; omega)),
+      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia), hk]
+    rw [foldUpTo.loop, dite_eq_left_of_eq_true (eq_true (by rw [USize.lt_iff_toNat_lt]; lia)),
       hf]
-    have := ih (i + 1) (k + 1) hsucc (by omega) (by omega)
+    have := ih (i + 1) (k + 1) hsucc (by lia) (by lia)
     rw [Nat.fold_succ] at this
     subst hk
     exact this
@@ -139,7 +139,7 @@ public theorem foldUpTo_eq {β : Type u} (n : Nat) (f : (i : Nat) → i < n → 
     (init : β) : foldUpTo n f fu init = Nat.fold n f init := by
   unfold foldUpTo
   split
-  · simpa using foldUpTo_loop_eq n f fu hf _ _ 0 0 (by simp) (by omega) init
+  · simpa using foldUpTo_loop_eq n f fu hf _ _ 0 0 (by simp) (by lia) init
   · rfl
 
 /-! ## Indices -/
@@ -148,13 +148,13 @@ public theorem foldUpTo_eq {β : Type u} (n : Nat) (f : (i : Nat) → i < n → 
 public theorem USize.toNat_add_of_lt {x y : USize} (h : x.toNat + y.toNat < USize.size) :
     (x + y).toNat = x.toNat + y.toNat := by
   have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  rw [USize.toNat_add, Nat.mod_eq_of_lt (by omega)]
+  rw [USize.toNat_add, Nat.mod_eq_of_lt (by lia)]
 
 /-- `(x * y).toNat = x.toNat * y.toNat` when the product doesn't wrap around. -/
 public theorem USize.toNat_mul_of_lt {x y : USize} (h : x.toNat * y.toNat < USize.size) :
     (x * y).toNat = x.toNat * y.toNat := by
   have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  rw [USize.toNat_mul, Nat.mod_eq_of_lt (by omega)]
+  rw [USize.toNat_mul, Nat.mod_eq_of_lt (by lia)]
 
 /-- A program that writes `v` at a `USize` index runs as one that writes it with `set!`. -/
 public theorem Tail.run_set_eq_set! {N : Nat} {γ : Type} (t : InPlace.Tail N γ) (a : Float64Array)
@@ -195,15 +195,15 @@ public theorem iterRange_of_lt (F : Nat → Float64Array → Float64Array) {lo h
 
 public theorem iterRange_of_le (F : Nat → Float64Array → Float64Array) {lo hi : Nat} (h : hi ≤ lo)
     (a : Float64Array) : iterRange F lo hi a = a := by
-  rw [iterRange]; simp [show ¬lo < hi by omega]
+  rw [iterRange]; simp [show ¬lo < hi by lia]
 
 public theorem size_iterRange (F : Nat → Float64Array → Float64Array)
     (hF : ∀ j a, (F j a).size = a.size) (lo hi : Nat) (a : Float64Array) :
     (iterRange F lo hi a).size = a.size := by
   obtain ⟨d, hd⟩ : ∃ d, hi - lo = d := ⟨_, rfl⟩
   induction d generalizing lo a with
-  | zero => rw [iterRange_of_le F (by omega)]
-  | succ d ih => rw [iterRange_of_lt F (by omega), ih (lo + 1) _ (by omega), hF]
+  | zero => rw [iterRange_of_le F (by lia)]
+  | succ d ih => rw [iterRange_of_lt F (by lia), ih (lo + 1) _ (by lia), hF]
 
 /-- The last step of `iterRange` comes last. -/
 public theorem iterRange_succ (F : Nat → Float64Array → Float64Array) {lo hi : Nat} (h : lo ≤ hi)
@@ -211,11 +211,11 @@ public theorem iterRange_succ (F : Nat → Float64Array → Float64Array) {lo hi
   obtain ⟨d, hd⟩ : ∃ d, hi - lo = d := ⟨_, rfl⟩
   induction d generalizing lo a with
   | zero =>
-    obtain rfl : lo = hi := by omega
-    rw [iterRange_of_lt F (by omega), iterRange_of_le F (by omega), iterRange_of_le F (by omega)]
+    obtain rfl : lo = hi := by lia
+    rw [iterRange_of_lt F (by lia), iterRange_of_le F (by lia), iterRange_of_le F (by lia)]
   | succ d ih =>
-    rw [iterRange_of_lt F (show lo < hi + 1 by omega), ih (lo := lo + 1) (by omega) _ (by omega),
-      ← iterRange_of_lt F (show lo < hi by omega)]
+    rw [iterRange_of_lt F (show lo < hi + 1 by lia), ih (lo := lo + 1) (by lia) _ (by lia),
+      ← iterRange_of_lt F (show lo < hi by lia)]
 
 /-- `iterRange` splits at any `mid` between its bounds. -/
 public theorem iterRange_split (F : Nat → Float64Array → Float64Array) {lo mid hi : Nat}
@@ -224,11 +224,11 @@ public theorem iterRange_split (F : Nat → Float64Array → Float64Array) {lo m
   obtain ⟨d, hd⟩ : ∃ d, mid - lo = d := ⟨_, rfl⟩
   induction d generalizing lo a with
   | zero =>
-    obtain rfl : lo = mid := by omega
+    obtain rfl : lo = mid := by lia
     rw [iterRange_of_le F (Nat.le_refl _)]
   | succ d ih =>
-    rw [iterRange_of_lt F (show lo < hi by omega), iterRange_of_lt F (show lo < mid by omega),
-      ih (by omega) _ (by omega)]
+    rw [iterRange_of_lt F (show lo < hi by lia), iterRange_of_lt F (show lo < mid by lia),
+      ih (by lia) _ (by lia)]
 
 /-- An element that no step changes is unchanged. -/
 public theorem getElem!_iterRange_of_frame (F : Nat → Float64Array → Float64Array) (q : Nat)
@@ -236,10 +236,10 @@ public theorem getElem!_iterRange_of_frame (F : Nat → Float64Array → Float64
     (iterRange F lo hi a)[q]! = a[q]! := by
   obtain ⟨d, hd⟩ : ∃ d, hi - lo = d := ⟨_, rfl⟩
   induction d generalizing lo a with
-  | zero => rw [iterRange_of_le F (by omega)]
+  | zero => rw [iterRange_of_le F (by lia)]
   | succ d ih =>
-    rw [iterRange_of_lt F (by omega), ih (fun j h₁ h₂ => hF j (by omega) h₂) _ (by omega),
-      hF lo (Nat.le_refl _) (by omega)]
+    rw [iterRange_of_lt F (by lia), ih (fun j h₁ h₂ => hF j (by lia) h₂) _ (by lia),
+      hF lo (Nat.le_refl _) (by lia)]
 
 /--
 An element that each step `F l` maps by `g l`, whatever the other elements of an array of size `N`,
@@ -253,8 +253,8 @@ public theorem getElem!_iterRange_of_pointwise (F : Nat → Float64Array → Flo
   induction hi with
   | zero => rw [iterRange_of_le F (Nat.le_refl _), Nat.fold_zero]
   | succ hi ih =>
-    rw [iterRange_succ F (Nat.zero_le _), hg hi (by omega) _ (by rw [size_iterRange F hF, ha]),
-      Nat.fold_succ, ih (fun l h => g l (by omega)) (fun l h a => hg l (by omega) a)]
+    rw [iterRange_succ F (Nat.zero_le _), hg hi (by lia) _ (by rw [size_iterRange F hF, ha]),
+      Nat.fold_succ, ih (fun l h => g l (by lia)) (fun l h a => hg l (by lia) a)]
 
 /--
 A step `a.set! (off + i) (G i a[off + i]!)` for each `i` in `lo ≤ i < hi` maps the elements in
@@ -267,18 +267,18 @@ public theorem getElem!_iterRange_set! (off : Nat) (G : Nat → Float → Float)
   obtain ⟨d, hd⟩ : ∃ d, hi - lo = d := ⟨_, rfl⟩
   induction d generalizing lo a with
   | zero =>
-    rw [iterRange_of_le _ (by omega)]
-    split <;> first | rfl | omega
+    rw [iterRange_of_le _ (by lia)]
+    split <;> first | rfl | lia
   | succ d ih =>
-    rw [iterRange_of_lt _ (by omega), ih (lo + 1) _ (by simpa using hp) (by omega)]
+    rw [iterRange_of_lt _ (by lia), ih (lo + 1) _ (by simpa using hp) (by lia)]
     by_cases hp' : p = off + lo
     · subst hp'
-      have : ¬lo + 1 ≤ lo := by omega
-      simp [getElem!_pos, hp, this, show lo < hi by omega]
+      have : ¬lo + 1 ≤ lo := by lia
+      simp [getElem!_pos, hp, this, show lo < hi by lia]
     · have : (a.set! (off + lo) (G lo a[off + lo]!))[p]! = a[p]! := by
         simp [getElem!_pos, hp, Ne.symm hp']
       rw [this]
-      split <;> split <;> first | rfl | omega
+      split <;> split <;> first | rfl | lia
 
 /-- `getElem!` of `set!`, in bounds. -/
 public theorem getElem!_set!_of_lt (a : Float64Array) (i : Nat) (v : Float) {q : Nat}
@@ -300,21 +300,21 @@ public theorem getElem!_iterRange_set2! (off off' : Nat) (G G' : Nat → Float �
   obtain ⟨d, hd'⟩ : ∃ d, hi - lo = d := ⟨_, rfl⟩
   induction d generalizing lo a with
   | zero =>
-    rw [iterRange_of_le _ (by omega)]
+    rw [iterRange_of_le _ (by lia)]
     split
-    · omega
+    · lia
     · split
-      · omega
+      · lia
       · rfl
   | succ d ih =>
-    rw [iterRange_of_lt _ (by omega), ih (lo + 1) _ (by simpa using hp) (by omega)]
+    rw [iterRange_of_lt _ (by lia), ih (lo + 1) _ (by simpa using hp) (by lia)]
     have e : ∀ q, q < a.size →
         ((a.set! (off + lo) (G lo a[off + lo]!)).set! (off' + lo) (G' lo a[off' + lo]!))[q]! =
           if q = off' + lo then G' lo a[off' + lo]! else if q = off + lo then G lo a[off + lo]!
           else a[q]! := by
       intro q hq
       rw [getElem!_set!_of_lt _ _ _ (by simpa using hq), getElem!_set!_of_lt _ _ _ hq]
-      have hne : off' ≠ off := by omega
+      have hne : off' ≠ off := by lia
       by_cases h1 : q = off' + lo
       · simp [h1]
       · by_cases h2 : q = off + lo
@@ -323,13 +323,13 @@ public theorem getElem!_iterRange_set2! (off off' : Nat) (G G' : Nat → Float �
     simp only [e p hp]
     by_cases h1 : p = off' + lo
     · subst h1
-      simp only [show off' + lo - off' = lo by omega]
-      (repeat' split) <;> first | rfl | omega | simp_all
+      simp only [show off' + lo - off' = lo by lia]
+      (repeat' split) <;> first | rfl | lia
     · by_cases h2 : p = off + lo
       · subst h2
-        simp only [show off + lo - off = lo by omega]
-        (repeat' split) <;> first | rfl | omega | simp_all
-      · (repeat' split) <;> first | rfl | omega
+        simp only [show off + lo - off = lo by lia]
+        (repeat' split) <;> first | rfl | lia
+      · (repeat' split) <;> first | rfl | lia
 
 /--
 Runs a loop whose body runs a program that maps the array by `F j` and then runs the next step,
@@ -348,12 +348,12 @@ public theorem run_forInFrom_iter {n : Nat} {γ : Type} (lo hi j₀ : USize)
   obtain ⟨d, hd⟩ : ∃ d, hi.toNat - j₀.toNat = d := ⟨_, rfl⟩
   induction d generalizing j₀ a with
   | zero =>
-    have hj : ¬ j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    have hj : ¬ j₀ < hi := by rw [USize.lt_iff_toNat_lt]; lia
     rw [Tail.forInFrom_eq, dite_eq_right_of_eq_false (eq_false hj)]
     congr 1
-    exact (iterRange_of_le F (by omega) a).symm
+    exact (iterRange_of_le F (by lia) a).symm
   | succ d ih =>
-    have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; lia
     have hj' : j₀.toNat < hi.toNat := hj
     rw [Tail.forInFrom_eq, dite_eq_left_of_eq_true (eq_true hj)]
     refine Eq.trans (hbody j₀ hlo hj' _ a h) ?_
@@ -361,8 +361,8 @@ public theorem run_forInFrom_iter {n : Nat} {γ : Type} (lo hi j₀ : USize)
       rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt]
       have : hi.toNat < USize.size := hi.toNat_lt_size
       have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-      omega
-    rw [ih (j₀ + 1) _ _ _ (by rw [hsucc]; omega)]
+      lia
+    rw [ih (j₀ + 1) _ _ _ (by rw [hsucc]; lia)]
     congr 1
     rw [hsucc, iterRange_of_lt F hj']
 
@@ -395,7 +395,7 @@ theorem stride_index {off inc i : Nat} (h : 0 < inc ∨ i = 0) :
 theorem eq_stride_of_mod {off inc p : Nat} (h₁ : off ≤ p) (h₂ : (p - off) % inc = 0) :
     p = off + inc * ((p - off) / inc) := by
   have := Nat.mod_add_div (p - off) inc
-  omega
+  lia
 
 /-- The element of a stride. -/
 public theorem getElem_mapStride_stride (a : Float64Array) (off inc lo hi g) {i : Nat}
@@ -418,14 +418,14 @@ public theorem mapStride_of_le (a : Float64Array) (off inc lo hi g) (h : hi ≤ 
     mapStride a off inc lo hi g = a := by
   apply ext_getElem (by simp)
   intro p _ hp
-  exact getElem_mapStride_of_ne a off inc lo hi g (fun i h₁ h₂ => by omega) hp
+  exact getElem_mapStride_of_ne a off inc lo hi g (fun i h₁ h₂ => by lia) hp
 
 /-- The first step of a stride comes first. -/
 theorem mapStride_set (a : Float64Array) (off inc lo hi : Nat) (g : Nat → Float → Float)
     (hlo : lo < hi) (hinc : 0 < inc ∨ hi ≤ 1) (h : off + inc * lo < a.size) :
     mapStride (a.set (off + inc * lo) (g lo a[off + inc * lo]) h) off inc (lo + 1) hi g =
       mapStride a off inc lo hi g := by
-  have hinc' : 0 < inc ∨ lo = 0 := by omega
+  have hinc' : 0 < inc ∨ lo = 0 := by lia
   apply ext_getElem (by simp)
   intro p hp _
   simp only [size_mapStride, size_set] at hp
@@ -436,9 +436,9 @@ theorem mapStride_set (a : Float64Array) (off inc lo hi : Nat) (g : Nat → Floa
     · simp
     · intro i h₁ _ e
       rcases hinc with hinc | hinc
-      · have : inc * lo < inc * i := Nat.mul_lt_mul_of_pos_left (by omega) hinc
-        omega
-      · omega
+      · have : inc * lo < inc * i := Nat.mul_lt_mul_of_pos_left (by lia) hinc
+        lia
+      · lia
   · simp only [mapStride, getElem_ofFn, Float64Array.getElem_set]
     rw [ite_eq_right (Ne.symm hq)]
     by_cases hc : off ≤ p ∧ (p - off) % inc = 0
@@ -446,10 +446,10 @@ theorem mapStride_set (a : Float64Array) (off inc lo hi : Nat) (g : Nat → Floa
       have hne : (p - off) / inc ≠ lo := fun h' => hq (by rw [e, h'])
       by_cases hr : (p - off) / inc < hi
       · by_cases hl : lo ≤ (p - off) / inc
-        · rw [ite_eq_left ⟨hc.1, hc.2, by omega, hr⟩, ite_eq_left ⟨hc.1, hc.2, hl, hr⟩]
-        · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
-      · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
-    · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
+        · rw [ite_eq_left ⟨hc.1, hc.2, by lia, hr⟩, ite_eq_left ⟨hc.1, hc.2, hl, hr⟩]
+        · rw [ite_eq_right (by lia), ite_eq_right (by lia)]
+      · rw [ite_eq_right (by lia), ite_eq_right (by lia)]
+    · rw [ite_eq_right (by lia), ite_eq_right (by lia)]
 
 /--
 Runs a loop that replaces each element `a[off + inc * j]`, for `j₀ ≤ j < hi`, with
@@ -473,12 +473,12 @@ public theorem run_forInFrom_stride {n : Nat} {γ : Type} (hi j₀ : USize)
   obtain ⟨d, hd⟩ : ∃ d, hi.toNat - j₀.toNat = d := ⟨_, rfl⟩
   induction d generalizing j₀ a with
   | zero =>
-    have hj : ¬ j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    have hj : ¬ j₀ < hi := by rw [USize.lt_iff_toNat_lt]; lia
     rw [Tail.forInFrom_eq, dite_eq_right_of_eq_false (eq_false hj)]
     congr 1
-    exact (mapStride_of_le a _ _ _ _ G (by omega)).symm
+    exact (mapStride_of_le a _ _ _ _ G (by lia)).symm
   | succ d ih =>
-    have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; lia
     have hj' : j₀.toNat < hi.toNat := hj
     rw [Tail.forInFrom_eq, dite_eq_left_of_eq_true (eq_true hj)]
     simp only [Tail.run_readThen, Tail.run_writeThen]
@@ -486,8 +486,8 @@ public theorem run_forInFrom_stride {n : Nat} {γ : Type} (hi j₀ : USize)
       rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt]
       have : hi.toNat < USize.size := hi.toNat_lt_size
       have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-      omega
-    rw [ih (j₀ + 1) _ _ _ (by rw [hsucc]; omega)]
+      lia
+    rw [ih (j₀ + 1) _ _ _ (by rw [hsucc]; lia)]
     congr 1
     have hq := p j₀ hj'
     have e := hix j₀ hj'
@@ -518,12 +518,12 @@ public theorem run_forInFrom_stride_write {n : Nat} {γ : Type} (hi j₀ : USize
   obtain ⟨d, hd⟩ : ∃ d, hi.toNat - j₀.toNat = d := ⟨_, rfl⟩
   induction d generalizing j₀ a with
   | zero =>
-    have hj : ¬ j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    have hj : ¬ j₀ < hi := by rw [USize.lt_iff_toNat_lt]; lia
     rw [Tail.forInFrom_eq, dite_eq_right_of_eq_false (eq_false hj)]
     congr 1
-    exact (mapStride_of_le a _ _ _ _ _ (by omega)).symm
+    exact (mapStride_of_le a _ _ _ _ _ (by lia)).symm
   | succ d ih =>
-    have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; lia
     have hj' : j₀.toNat < hi.toNat := hj
     rw [Tail.forInFrom_eq, dite_eq_left_of_eq_true (eq_true hj)]
     simp only [Tail.run_writeThen]
@@ -531,8 +531,8 @@ public theorem run_forInFrom_stride_write {n : Nat} {γ : Type} (hi j₀ : USize
       rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt]
       have : hi.toNat < USize.size := hi.toNat_lt_size
       have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-      omega
-    rw [ih (j₀ + 1) _ _ _ (by rw [hsucc]; omega)]
+      lia
+    rw [ih (j₀ + 1) _ _ _ (by rw [hsucc]; lia)]
     congr 1
     have hq := p j₀ hj'
     have e := hix j₀ hj'
@@ -550,19 +550,19 @@ A copy of `n` elements from `src` to `dest`, both in bounds unless `n = 0`, is a
 public theorem copySlice_eq_mapStride (src dest : Float64Array) (so d n : Nat)
     (hs : n = 0 ∨ so + n ≤ src.size) (hd : n = 0 ∨ d + n ≤ dest.size) :
     src.copySlice so dest d n = mapStride dest d 1 0 n fun i _ => src[so + i]! := by
-  apply ext_getElem (by simp [size_copySlice]; omega)
+  apply ext_getElem (by simp [size_copySlice]; lia)
   intro p h₁ h₂
   rw [getElem_copySlice]
   simp only [mapStride, getElem_ofFn, Nat.mod_one, Nat.div_one]
   by_cases hp : d ≤ p ∧ p - d < n
   · rw [ite_eq_left ⟨hp.1, trivial, Nat.zero_le _, hp.2⟩,
-      dite_eq_right (by omega), dite_eq_left (by omega), getElem!_pos src _ (by omega)]
+      dite_eq_right (by lia), dite_eq_left (by lia), getElem!_pos src _ (by lia)]
     congr 1
-    omega
-  · rw [ite_eq_right (by omega)]
+    lia
+  · rw [ite_eq_right (by lia)]
     split
     · rfl
-    · rw [dite_eq_right (by omega)]
+    · rw [dite_eq_right (by lia)]
 
 /-- Two strides with the same indices compose: the element `i` is mapped by `g` and then `g'`. -/
 public theorem mapStride_mapStride (a : Float64Array) (off inc lo hi : Nat)
@@ -613,7 +613,7 @@ public theorem mapStride_widen (a : Float64Array) (off inc lo hi lo' hi' : Nat)
   intro p _ _
   simp only [mapStride, getElem_ofFn]
   by_cases hc : off ≤ p ∧ (p - off) % inc = 0 ∧ lo ≤ (p - off) / inc ∧ (p - off) / inc < hi
-  · rw [ite_eq_left hc, ite_eq_left ⟨hc.1, hc.2.1, by omega, by omega⟩,
+  · rw [ite_eq_left hc, ite_eq_left ⟨hc.1, hc.2.1, by lia, by lia⟩,
       ite_eq_left ⟨hc.2.2.1, hc.2.2.2⟩]
   · rw [ite_eq_right hc]
     split
@@ -631,10 +631,10 @@ public theorem set_eq_mapStride (a : Float64Array) (off inc j : Nat) (v : Float)
   simp only [mapStride, getElem_ofFn, Float64Array.getElem_set]
   by_cases hp : off + inc * j = p
   · subst hp
-    rw [ite_eq_left rfl, ite_eq_left ⟨h₁, h₂, by omega, by omega⟩]
+    rw [ite_eq_left rfl, ite_eq_left ⟨h₁, h₂, by lia, by lia⟩]
   · rw [ite_eq_right hp, ite_eq_right]
     intro ⟨h₁', h₂', h₃', h₄'⟩
-    exact hp (by rw [eq_stride_of_mod h₁' h₂', show (p - off) / inc = j by omega])
+    exact hp (by rw [eq_stride_of_mod h₁' h₂', show (p - off) / inc = j by lia])
 
 /-- A stride from the step `s` is a stride from the offset of that step. -/
 public theorem mapStride_shift (a : Float64Array) (off inc s h : Nat) (g : Nat → Float → Float)
@@ -645,7 +645,7 @@ public theorem mapStride_shift (a : Float64Array) (off inc s h : Nat) (g : Nat �
     intro p _ _
     simp only [mapStride, getElem_ofFn]
     by_cases hp : off + inc * s ≤ p
-    · have e₁ : p - off = inc * s + (p - (off + inc * s)) := by omega
+    · have e₁ : p - off = inc * s + (p - (off + inc * s)) := by lia
       have em : (p - off) % inc = (p - (off + inc * s)) % inc := by
         rw [e₁, Nat.mul_add_mod]
       have ed : (p - off) / inc = s + (p - (off + inc * s)) / inc := by
@@ -653,14 +653,14 @@ public theorem mapStride_shift (a : Float64Array) (off inc s h : Nat) (g : Nat �
       simp only [em, ed, Nat.add_sub_cancel_left]
       by_cases hc : (p - (off + inc * s)) % inc = 0 ∧ (p - (off + inc * s)) / inc < h
       · rw [ite_eq_left ⟨hp, hc.1, Nat.zero_le _, hc.2⟩,
-          ite_eq_left ⟨by omega, hc.1, Nat.le_add_right _ _, Nat.add_lt_add_left hc.2 _⟩]
-      · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
-    · rw [ite_eq_right (by omega), ite_eq_right]
+          ite_eq_left ⟨by lia, hc.1, Nat.le_add_right _ _, Nat.add_lt_add_left hc.2 _⟩]
+      · rw [ite_eq_right (by lia), ite_eq_right (by lia)]
+    · rw [ite_eq_right (by lia), ite_eq_right]
       intro ⟨h₁, h₂, h₃, _⟩
       have := eq_stride_of_mod h₁ h₂
       have : inc * s ≤ inc * ((p - off) / inc) := Nat.mul_le_mul_left _ h₃
-      omega
-  · rw [mapStride_of_le _ _ _ _ _ _ (Nat.le_refl _), mapStride_of_le _ _ _ _ _ _ (by omega)]
+      lia
+  · rw [mapStride_of_le _ _ _ _ _ _ (Nat.le_refl _), mapStride_of_le _ _ _ _ _ _ (by lia)]
 
 /-- The identity on a stride leaves the array unchanged. -/
 public theorem mapStride_id (a : Float64Array) (off inc lo hi : Nat) :
@@ -680,16 +680,16 @@ public theorem set_mapStride_succ (a : Float64Array) (off inc j n : Nat) (t : Fl
     mapStride (a.set p t h) (off + inc * (j + 1)) inc 0 (n - j - 1) G =
       mapStride a off inc j n fun i v => if i = j then t else G (i - (j + 1)) v := by
   subst hp
-  rw [set_eq_mapStride _ _ _ _ _ (by omega), mapStride_shift _ _ _ _ _ _ (by omega),
-    show j + 1 + (n - j - 1) = n by omega,
-    mapStride_widen _ _ _ j (j + 1) j n _ (Nat.le_refl _) (by omega),
-    mapStride_widen _ _ _ (j + 1) n j n _ (by omega) (Nat.le_refl _), mapStride_mapStride]
+  rw [set_eq_mapStride _ _ _ _ _ (by lia), mapStride_shift _ _ _ _ _ _ (by lia),
+    show j + 1 + (n - j - 1) = n by lia,
+    mapStride_widen _ _ _ j (j + 1) j n _ (Nat.le_refl _) (by lia),
+    mapStride_widen _ _ _ (j + 1) n j n _ (by lia) (Nat.le_refl _), mapStride_mapStride]
   apply mapStride_congr
   intro i v h₁ h₂
   by_cases hi : i = j
-  · subst hi; simp [show ¬i + 1 ≤ i by omega]
-  · have : j + 1 ≤ i := by omega
-    simp [hi, this, h₂, show ¬i < j + 1 by omega]
+  · subst hi; simp [show ¬i + 1 ≤ i by lia]
+  · have : j + 1 ≤ i := by lia
+    simp [hi, this, h₂, show ¬i < j + 1 by lia]
 
 /--
 Writing `t` at the step `j` of a stride, then updating the steps before `j` by `G`, is a stride over
@@ -703,11 +703,11 @@ public theorem set_mapStride_pred (a : Float64Array) (off inc j : Nat) (t : Floa
   subst hp
   rw [set_eq_mapStride _ _ _ _ _ hinc,
     mapStride_widen _ _ _ j (j + 1) 0 (j + 1) _ (Nat.zero_le _) (Nat.le_refl _),
-    mapStride_widen _ _ _ 0 j 0 (j + 1) _ (Nat.le_refl _) (by omega), mapStride_mapStride]
+    mapStride_widen _ _ _ 0 j 0 (j + 1) _ (Nat.le_refl _) (by lia), mapStride_mapStride]
   apply mapStride_congr
   intro i v _ h₂
   by_cases hi : i = j
   · subst hi; simp
-  · simp [hi, show i < j by omega, show ¬j ≤ i by omega]
+  · simp [hi, show i < j by lia, show ¬j ≤ i by lia]
 
 end BLAS.Float64
