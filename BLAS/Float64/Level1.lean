@@ -32,29 +32,39 @@ variable {n : Nat}
 A vector `v` whose array is the array of `w` with the element `i` mapped by `g i`, at the same
 indices, has the elements `g i w[i]`.
 -/
-public theorem getElem_of_data_eq_mapStride {v w : Vec n} (g : Nat → Float → Float)
-    (hd : v.data = mapStride w.data w.off w.inc 0 n g) (ho : v.off = w.off)
+public theorem getElem_of_data_eq_modifyAt {v w : Vec n} (g : Nat → Float → Float)
+    (hd : v.data = w.data.modifyAt w.stride.idx 0 n g) (ho : v.off = w.off)
     (hc : v.inc = w.inc) (i : Nat) (h : i < n) : v[i] = g i w[i] := by
   simp only [getElem_def]
-  have hq := w.index_lt h
   have e : v.data[v.off + v.inc * i]'(v.index_lt h) =
-      (mapStride w.data w.off w.inc 0 n g)[w.off + w.inc * i]'(by
-        simpa using hq) := by
-    simp only [hd, ho, hc]
-  rw [e, getElem_mapStride_stride _ _ _ _ _ _ ⟨Nat.zero_le _, h⟩ (w.inc_pos_of_lt h) hq]
+      (w.data.modifyAt w.stride.idx 0 n g)[w.stride.idx i]'(by
+        rw [size_modifyAt]; exact w.index_lt h) := by
+    simp only [hd, ho, hc, idx_stride]
+  rw [e, getElem_modifyAt_stride _ w.fits (Nat.le_refl _) _ (Nat.zero_le _) h]
+  rfl
+
+/--
+The element `i` of a `modifyAt` at the indices of a vector, on an array of the size of the
+vector's array.
+-/
+public theorem getElem_modifyAt_stride (x : Vec n) {a : Float64Array} (ha : a.size = x.data.size)
+    {lo hi : Nat} (hn : hi ≤ n) (g : Nat → Float → Float) {i : Nat} (h₁ : lo ≤ i) (h₂ : i < hi)
+    (h : x.off + x.inc * i < (a.modifyAt x.stride.idx lo hi g).size) :
+    (a.modifyAt x.stride.idx lo hi g)[x.off + x.inc * i] =
+      g i (a[x.off + x.inc * i]'(by simpa using h)) :=
+  Float64Array.getElem_modifyAt_stride a (by rw [ha]; exact x.fits) hn g h₁ h₂
 
 /-- The number of elements `n` as a `USize`, in a vector whose array has a `USize` size. -/
 public theorem toNat_toUSize (x : Vec n) (hs : x.data.size < USize.size) : n.toUSize.toNat = n := by
   have := x.le_size
   simp [Nat.mod_eq_of_lt (show n < USize.size by lia)]
 
-/-- The loop of a vector update from the step `0`: its indices are distinct and don't wrap. -/
-public theorem loop_facts (x : Vec n) (hs : x.data.size < USize.size) :
-    (0 < x.inc ∨ n.toUSize.toNat ≤ 1) ∧
-      ∀ j : USize, j.toNat < n.toUSize.toNat →
-        (x.off.toUSize + x.inc.toUSize * j).toNat = x.off + x.inc * j.toNat := by
+/-- The `USize` indices of the loop of a vector update, from the step `0`, don't wrap. -/
+public theorem loop_idx (x : Vec n) (hs : x.data.size < USize.size) :
+    ∀ j : USize, (0 : USize).toNat ≤ j.toNat → j.toNat < n.toUSize.toNat →
+      (x.off.toUSize + x.inc.toUSize * j).toNat = x.stride.idx j.toNat := by
   rw [x.toNat_toUSize hs]
-  exact ⟨x.inc_pos, fun j hj => x.toNat_index hs hj⟩
+  exact fun j _ hj => x.toNat_index hs hj
 
 /-- The array of `axpy`. -/
 public def axpyData (α : Float) (x y : Vec n) : Float64Array :=
@@ -70,20 +80,19 @@ public def axpyData (α : Float) (x y : Vec n) : Float64Array :=
       for k in 0...nu do
         have hk : (o + c * k).toNat < a.size := y.toNat_index_lt hs.2 (by lia)
         a[o + c * k] := α * x.uget xo xc rfl rfl hs.1 k (by lia) + a[o + c * k]).2
-  else mapStride y.data y.off y.inc 0 n fun i v => α * x.data[x.off + x.inc * i]! + v
+  else y.data.modifyAt y.stride.idx 0 n fun i v => α * x.data[x.off + x.inc * i]! + v
 
 public theorem axpyData_eq (α : Float) (x y : Vec n) :
-    axpyData α x y = mapStride y.data y.off y.inc 0 n
+    axpyData α x y = y.data.modifyAt y.stride.idx 0 n
       fun i v => α * x.data[x.off + x.inc * i]! + v := by
   unfold axpyData
   split
   · rename_i hs
-    obtain ⟨hinc, hix⟩ := y.loop_facts hs.2
+    have he := y.loop_idx hs.2
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_stride (G := fun i v => α * x.data[x.off + x.inc * i]! + v)
-      (OFF := _) (INC := _) (hinc := hinc) (hix := hix)]
+    rw [Tail.run_forInFrom_modify (G := fun i v => α * x.data[x.off + x.inc * i]! + v) (he := he)]
     · simp only [Tail.run_done, y.toNat_toUSize hs.2, USize.toNat_zero]
-    · intro j hj v
+    · intro j _ hj v
       rw [y.toNat_toUSize hs.2] at hj
       rw [getElem!_pos x.data (x.off + x.inc * j.toNat) (x.index_lt hj)]
       simp [getElem_def]
@@ -98,11 +107,11 @@ elements of the array outside `y` unchanged.
   off := y.off
   inc := y.inc
   inc_pos := y.inc_pos
-  bound := by rw [axpyData_eq, size_mapStride]; exact y.bound
+  bound := by rw [axpyData_eq, size_modifyAt]; exact y.bound
 
 /-- The array of `axpy α x y` is the array of `y` with its elements updated. -/
 public theorem data_axpy (α : Float) (x y : Vec n) :
-    (axpy α x y).data = mapStride y.data y.off y.inc 0 n
+    (axpy α x y).data = y.data.modifyAt y.stride.idx 0 n
       fun i v => α * x.data[x.off + x.inc * i]! + v :=
   axpyData_eq α x y
 
@@ -112,7 +121,7 @@ public theorem data_axpy (α : Float) (x y : Vec n) :
 
 @[simp] public theorem getElem_axpy (α : Float) (x y : Vec n) (i : Nat) (h : i < n) :
     (axpy α x y)[i] = α * x[i] + y[i] := by
-  rw [getElem_of_data_eq_mapStride _ (data_axpy α x y) rfl rfl i h,
+  rw [getElem_of_data_eq_modifyAt _ (data_axpy α x y) rfl rfl i h,
     getElem!_pos x.data (x.off + x.inc * i) (x.index_lt h)]
   rfl
 
@@ -128,18 +137,18 @@ public def scalData (α : Float) (x : Vec n) : Float64Array :=
       for k in 0...nu do
         have hk : (o + c * k).toNat < a.size := x.toNat_index_lt hs (by lia)
         a[o + c * k] := α * a[o + c * k]).2
-  else mapStride x.data x.off x.inc 0 n fun _ v => α * v
+  else x.data.modifyAt x.stride.idx 0 n fun _ v => α * v
 
 public theorem scalData_eq (α : Float) (x : Vec n) :
-    scalData α x = mapStride x.data x.off x.inc 0 n fun _ v => α * v := by
+    scalData α x = x.data.modifyAt x.stride.idx 0 n fun _ v => α * v := by
   unfold scalData
   split
   · rename_i hs
-    obtain ⟨hinc, hix⟩ := x.loop_facts hs
+    have he := x.loop_idx hs
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_stride (G := fun _ v => α * v) (OFF := _) (INC := _) (hinc := hinc) (hix := hix)]
+    rw [Tail.run_forInFrom_modify (G := fun _ v => α * v) (he := he)]
     · simp only [Tail.run_done, x.toNat_toUSize hs, USize.toNat_zero]
-    · intro _ _ _; rfl
+    · intro _ _ _ _; rfl
   · rfl
 
 /--
@@ -151,11 +160,11 @@ elements of the array outside `x` unchanged.
   off := x.off
   inc := x.inc
   inc_pos := x.inc_pos
-  bound := by rw [scalData_eq, size_mapStride]; exact x.bound
+  bound := by rw [scalData_eq, size_modifyAt]; exact x.bound
 
 /-- The array of `scal α x` is the array of `x` with its elements updated. -/
 public theorem data_scal (α : Float) (x : Vec n) :
-    (scal α x).data = mapStride x.data x.off x.inc 0 n fun _ v => α * v :=
+    (scal α x).data = x.data.modifyAt x.stride.idx 0 n fun _ v => α * v :=
   scalData_eq α x
 
 @[simp] public theorem off_scal (α : Float) (x : Vec n) : (scal α x).off = x.off := rfl
@@ -164,7 +173,7 @@ public theorem data_scal (α : Float) (x : Vec n) :
 
 @[simp] public theorem getElem_scal (α : Float) (x : Vec n) (i : Nat) (h : i < n) :
     (scal α x)[i] = α * x[i] :=
-  getElem_of_data_eq_mapStride _ (data_scal α x) rfl rfl i h
+  getElem_of_data_eq_modifyAt _ (data_scal α x) rfl rfl i h
 
 /--
 The array of `copy`: a single `memmove` for contiguous vectors, and a loop over the strides
@@ -184,29 +193,36 @@ public def copyData (x y : Vec n) : Float64Array :=
       for k in 0...nu do
         have hk : (o + c * k).toNat < a.size := y.toNat_index_lt hs.2 (by lia)
         a[o + c * k] := x.uget xo xc rfl rfl hs.1 k (by lia)).2
-  else mapStride y.data y.off y.inc 0 n fun i _ => x.data[x.off + x.inc * i]!
+  else y.data.modifyAt y.stride.idx 0 n fun i _ => x.data[x.off + x.inc * i]!
 
 public theorem copyData_eq (x y : Vec n) :
-    copyData x y = mapStride y.data y.off y.inc 0 n
+    copyData x y = y.data.modifyAt y.stride.idx 0 n
       fun i _ => x.data[x.off + x.inc * i]! := by
   unfold copyData
   split
   · rename_i hc
-    have hw : ∀ v : Vec n, v.inc = 1 → n = 0 ∨ v.off + n ≤ v.data.size := by
-      intro v h
-      rcases Nat.eq_zero_or_pos n with h' | h'
-      · lia
-      · have := v.index_lt (i := n - 1) (by lia); simp [h] at this; lia
-    rw [copySlice_eq_mapStride _ _ _ _ _ (hw x hc.1) (hw y hc.2), hc.1, hc.2]
-    simp
+    rcases Nat.eq_zero_or_pos n with h₀ | h₀
+    · subst h₀
+      rw [modifyAt_self]
+      apply ext_getElem (by simp [size_copySlice]; lia)
+      intro p _ _
+      rw [getElem_copySlice]
+      split
+      · rfl
+      · rw [dite_eq_right (by lia)]
+    · have hw : ∀ v : Vec n, v.inc = 1 → v.off + n ≤ v.data.size := by
+        intro v h
+        have := v.index_lt (i := n - 1) (by lia); simp [h] at this; lia
+      rw [copySlice_eq_modifyAt _ _ _ _ _ _ (hw x hc.1) (hw y hc.2)]
+      exact modifyAt_congr _ (fun i _ _ => by simp [idx_stride, hc.2])
+        (fun i _ _ => by simp [hc.1])
   split
   · rename_i hs
-    obtain ⟨hinc, hix⟩ := y.loop_facts hs.2
+    have he := y.loop_idx hs.2
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_stride_write (G := fun i => x.data[x.off + x.inc * i]!)
-      (OFF := _) (INC := _) (hinc := hinc) (hix := hix)]
+    rw [Tail.run_forInFrom_write (G := fun i => x.data[x.off + x.inc * i]!) (he := he)]
     · simp only [Tail.run_done, y.toNat_toUSize hs.2, USize.toNat_zero]
-    · intro j hj
+    · intro j _ hj
       rw [y.toNat_toUSize hs.2] at hj
       rw [getElem!_pos x.data (x.off + x.inc * j.toNat) (x.index_lt hj)]
       simp [getElem_def]
@@ -221,11 +237,11 @@ elements of the array outside `y` unchanged.
   off := y.off
   inc := y.inc
   inc_pos := y.inc_pos
-  bound := by rw [copyData_eq, size_mapStride]; exact y.bound
+  bound := by rw [copyData_eq, size_modifyAt]; exact y.bound
 
 /-- The array of `copy x y` is the array of `y` with its elements replaced. -/
 public theorem data_copy (x y : Vec n) :
-    (copy x y).data = mapStride y.data y.off y.inc 0 n
+    (copy x y).data = y.data.modifyAt y.stride.idx 0 n
       fun i _ => x.data[x.off + x.inc * i]! :=
   copyData_eq x y
 
@@ -235,7 +251,7 @@ public theorem data_copy (x y : Vec n) :
 
 @[simp] public theorem getElem_copy (x y : Vec n) (i : Nat) (h : i < n) :
     (copy x y)[i] = x[i] := by
-  rw [getElem_of_data_eq_mapStride _ (data_copy x y) rfl rfl i h,
+  rw [getElem_of_data_eq_modifyAt _ (data_copy x y) rfl rfl i h,
     getElem!_pos x.data (x.off + x.inc * i) (x.index_lt h)]
   rfl
 

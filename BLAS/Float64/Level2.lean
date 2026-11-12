@@ -57,31 +57,31 @@ public def gemvData (α : Float) (A : Mat m n) (x : Vec n) (β : Float) (y : Vec
         for i in 0...mu do
           have hk : (o + c * i).toNat < a.size := y.toNat_index_lt hs.2.2 (by lia)
           a[o + c * i] := a[o + c * i] + t * A.uget ao al rfl rfl hs.1 i j (by lia) (by lia)).2
-  else mapStride y.data y.off y.inc 0 m (gemvAt α A x β)
+  else y.data.modifyAt y.stride.idx 0 m (gemvAt α A x β)
 
 public theorem gemvData_eq (α : Float) (A : Mat m n) (x : Vec n) (β : Float) (y : Vec m) :
-    gemvData α A x β y = mapStride y.data y.off y.inc 0 m (gemvAt α A x β) := by
+    gemvData α A x β y = y.data.modifyAt y.stride.idx 0 m (gemvAt α A x β) := by
   unfold gemvData
   split
   · rename_i hs
-    obtain ⟨hinc, hix⟩ := y.loop_facts hs.2.2
+    have he := y.loop_idx hs.2.2
     have hmu := y.toNat_toUSize hs.2.2
     have hnu := x.toNat_toUSize hs.2.1
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_stride (G := fun _ v => β * v) (OFF := _) (INC := _) (hinc := hinc)
-      (hix := hix) (hg := fun _ _ _ => rfl)]
-    rw [run_forInFrom_iter (F := fun j c => mapStride c y.off y.inc 0 m fun i v =>
+    rw [Tail.run_forInFrom_modify (G := fun _ v => β * v) (he := he) (hg := fun _ _ _ _ => rfl)]
+    rw [Tail.run_forInFrom_unit (F := fun j c => c.modifyAt y.stride.idx 0 m fun i v =>
       v + α * x.data[x.off + x.inc * j]! * A.data[A.off + A.ld * j + i]!) (hF := by simp)]
-    · simp only [Tail.run_done, USize.toNat_zero, hmu, hnu]
-      rw [iterRange_mapStride, mapStride_mapStride]
+    · have hinj := y.fits.injOn (lo := 0) (Nat.le_refl _)
+      simp only [Tail.run_done, USize.toNat_zero, hmu, hnu]
+      rw [iterRange_modifyAt _ _ hinj, modifyAt_modifyAt _ _ hinj]
       rfl
     · intro j _ hj next a h
       rw [hnu] at hj
-      rw [run_forInFrom_stride (G := fun i v =>
+      rw [Tail.run_forInFrom_modify (G := fun i v =>
           v + α * x.data[x.off + x.inc * j.toNat]! * A.data[A.off + A.ld * j.toNat + i]!)
-        (OFF := _) (INC := _) (hinc := hinc) (hix := hix)]
+        (he := he)]
       · simp only [USize.toNat_zero, hmu]
-      · intro i hi v
+      · intro i _ hi v
         rw [hmu] at hi
         rw [Vec.uget_eq_getElem, uget_eq_getElem, Vec.getElem_def, getElem_def,
           getElem!_pos x.data _ (x.index_lt hj), getElem!_pos A.data _ (A.index_lt hi hj)]
@@ -98,11 +98,11 @@ reference BLAS, it doesn't special-case `β = 0`, so a `NaN` in `y` stays a `NaN
   off := y.off
   inc := y.inc
   inc_pos := y.inc_pos
-  bound := by rw [gemvData_eq, size_mapStride]; exact y.bound
+  bound := by rw [gemvData_eq, size_modifyAt]; exact y.bound
 
 /-- The array of `gemv α A x β y` is the array of `y` with its elements updated. -/
 public theorem data_gemv (α : Float) (A : Mat m n) (x : Vec n) (β : Float) (y : Vec m) :
-    (gemv α A x β y).data = mapStride y.data y.off y.inc 0 m (gemvAt α A x β) :=
+    (gemv α A x β y).data = y.data.modifyAt y.stride.idx 0 m (gemvAt α A x β) :=
   gemvData_eq α A x β y
 
 @[simp] public theorem off_gemv (α : Float) (A : Mat m n) (x : Vec n) (β : Float) (y : Vec m) :
@@ -118,7 +118,7 @@ Element `i` of `gemv α A x β y` is `β * y[i]`, plus the terms `α * x[j] * A[
 @[simp] public theorem getElem_gemv (α : Float) (A : Mat m n) (x : Vec n) (β : Float) (y : Vec m)
     (i : Nat) (h : i < m) :
     (gemv α A x β y)[i] = Nat.fold n (fun j _ s => s + α * x[j] * A[(i, j)]) (β * y[i]) := by
-  rw [Vec.getElem_of_data_eq_mapStride _ (data_gemv α A x β y) rfl rfl i h, gemvAt]
+  rw [Vec.getElem_of_data_eq_modifyAt _ (data_gemv α A x β y) rfl rfl i h, gemvAt]
   congr
   funext j hj s
   rw [getElem!_pos x.data _ (x.index_lt hj), getElem!_pos A.data _ (A.index_lt h hj)]
@@ -153,20 +153,19 @@ public def gemvTData (α : Float) (A : Mat m n) (x : Vec m) (β : Float) (y : Ve
           (fun i hi s => s + A[(i, j.toNat)] * x[i])
           (fun i hi s => s + A.uget ao al rfl rfl hs.1 i j hi hj * x.uget xo xc rfl rfl hs.2.1 i hi)
           0).2
-  else mapStride y.data y.off y.inc 0 n (gemvTAt α A x β)
+  else y.data.modifyAt y.stride.idx 0 n (gemvTAt α A x β)
 
 public theorem gemvTData_eq (α : Float) (A : Mat m n) (x : Vec m) (β : Float) (y : Vec n) :
-    gemvTData α A x β y = mapStride y.data y.off y.inc 0 n (gemvTAt α A x β) := by
+    gemvTData α A x β y = y.data.modifyAt y.stride.idx 0 n (gemvTAt α A x β) := by
   unfold gemvTData
   split
   · rename_i hs
-    obtain ⟨hinc, hix⟩ := y.loop_facts hs.2.2
+    have he := y.loop_idx hs.2.2
     have hnu := y.toNat_toUSize hs.2.2
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_stride (G := gemvTAt α A x β) (OFF := _) (INC := _) (hinc := hinc)
-      (hix := hix)]
+    rw [Tail.run_forInFrom_modify (G := gemvTAt α A x β) (he := he)]
     · simp only [Tail.run_done, USize.toNat_zero, hnu]
-    · intro j hj v
+    · intro j _ hj v
       rw [hnu] at hj
       rw [foldUpTo_eq _ _ _ (by simp), gemvTAt]
       congr
@@ -187,11 +186,11 @@ array outside `y` unchanged.
   off := y.off
   inc := y.inc
   inc_pos := y.inc_pos
-  bound := by rw [gemvTData_eq, size_mapStride]; exact y.bound
+  bound := by rw [gemvTData_eq, size_modifyAt]; exact y.bound
 
 /-- The array of `gemvT α A x β y` is the array of `y` with its elements updated. -/
 public theorem data_gemvT (α : Float) (A : Mat m n) (x : Vec m) (β : Float) (y : Vec n) :
-    (gemvT α A x β y).data = mapStride y.data y.off y.inc 0 n (gemvTAt α A x β) :=
+    (gemvT α A x β y).data = y.data.modifyAt y.stride.idx 0 n (gemvTAt α A x β) :=
   gemvTData_eq α A x β y
 
 @[simp] public theorem off_gemvT (α : Float) (A : Mat m n) (x : Vec m) (β : Float) (y : Vec n) :
@@ -208,7 +207,7 @@ Element `j` of `gemvT α A x β y` is `β * y[j] + α * s`, where `s` sums the t
     (y : Vec n) (j : Nat) (h : j < n) :
     (gemvT α A x β y)[j] =
       β * y[j] + α * Nat.fold m (fun i _ s => s + A[(i, j)] * x[i]) 0 := by
-  rw [Vec.getElem_of_data_eq_mapStride _ (data_gemvT α A x β y) rfl rfl j h, gemvTAt]
+  rw [Vec.getElem_of_data_eq_modifyAt _ (data_gemvT α A x β y) rfl rfl j h, gemvTAt]
   congr
   funext i hi s
   rw [getElem!_pos x.data _ (x.index_lt hi), getElem!_pos A.data _ (A.index_lt hi h)]
@@ -252,17 +251,18 @@ public theorem gerData_eq (α : Float) (x : Vec m) (y : Vec n) (A : Mat m n) :
     have hmu := x.toNat_toUSize hs.2.1
     have hnu := y.toNat_toUSize hs.2.2
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_iter (F := fun j c => mapStride c (A.off + A.ld * j) 1 0 m fun i v =>
-      gerAt α x y i j v) (hF := by simp)]
+    rw [Tail.run_forInFrom_unit (F := fun j c =>
+      c.modifyAt (Stride.mk (A.off + A.ld * j) 1).idx 0 m fun i v => gerAt α x y i j v)
+      (hF := by simp)]
     · simp only [Tail.run_done, USize.toNat_zero, hnu]
       rw [iterRange_cols _ _ _ A.le_ld]
     · intro j _ hj next a h
       rw [hnu] at hj
-      rw [run_forInFrom_stride (G := fun i v => gerAt α x y i j.toNat v)
-        (OFF := A.off + A.ld * j.toNat) (INC := 1) (hinc := Or.inl Nat.one_pos)
-        (hix := fun i hi => A.toNat_col_index hs.1 (by lia) hj)]
+      rw [Tail.run_forInFrom_modify (G := fun i v => gerAt α x y i j.toNat v)
+        (idx := (Stride.mk (A.off + A.ld * j.toNat) 1).idx)
+        (he := fun i _ hi => A.toNat_col_index hs.1 (by lia) hj)]
       · simp only [USize.toNat_zero, hmu]
-      · intro i hi v
+      · intro i _ hi v
         rw [hmu] at hi
         rw [Vec.uget_eq_getElem, Vec.uget_eq_getElem, Vec.getElem_def, Vec.getElem_def, gerAt,
           getElem!_pos x.data (x.off + x.inc * i.toNat) (x.index_lt hi),

@@ -104,7 +104,7 @@ public theorem trsvUpper_eq (d : Diag) (A : Mat n n) (x : Vec n) {i : Nat} (h : 
 @[expose] public def trsvLowerStep (d : Diag) (A : Mat n n) (x : Vec n) (j : Nat)
     (b : Float64Array) : Float64Array :=
   let t := d.apply b[x.off + x.inc * j]! A.data[A.off + A.ld * j + j]!
-  mapStride b x.off x.inc j n fun i v => if i = j then t else v - t * A.data[A.off + A.ld * j + i]!
+  b.modifyAt x.stride.idx j n fun i v => if i = j then t else v - t * A.data[A.off + A.ld * j + i]!
 
 /-
 The bounds that the inner loops of the kernels below prove. `lia` can't prove them in place: its
@@ -155,7 +155,7 @@ public theorem trsvLowerData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
   · rename_i hs
     have hnu := x.toNat_toUSize hs.2
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_iter (F := trsvLowerStep d A x) (hF := by simp [trsvLowerStep])]
+    rw [Tail.run_forInFrom_unit (F := trsvLowerStep d A x) (hF := by simp [trsvLowerStep])]
     · simp only [Tail.run_done, USize.toNat_zero, hnu]
     · intro j _ hj next a h
       rw [hnu] at hj
@@ -165,14 +165,13 @@ public theorem trsvLowerData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
       have hp : (x.off.toUSize + x.inc.toUSize * j).toNat = x.off + x.inc * j.toNat :=
         x.toNat_index hs.2 hj
       have hsz := Nat.lt_of_le_of_lt x.le_size hs.2
-      rw [run_forInFrom_stride (OFF := x.off + x.inc * (j.toNat + 1)) (INC := x.inc)
-        (hinc := by rcases x.inc_pos with h' | h' <;> lia)
-        (hix := fun k hk => x.toNat_index_shift hs.2 (by lia))
+      rw [Tail.run_forInFrom_modify (idx := (x.stride.shift (j.toNat + 1)).idx)
+        (he := fun k _ hk => x.toNat_index_shift hs.2 (by lia))
         (G := fun k v => v - d.apply a[x.off + x.inc * j.toNat]! A.data[A.off + A.ld * j.toNat + j.toNat]! *
           A.data[A.off + A.ld * j.toNat + (j.toNat + 1 + k)]!)]
       · congr 1
-        rw [trsvLowerStep, hr, USize.toNat_zero, set_mapStride_succ _ _ _ _ _ _ _ x.inc_pos hj _ hp]
-        apply mapStride_congr
+        rw [trsvLowerStep, hr, USize.toNat_zero, set_modifyAt_succ _ x.stride _ _ hj _ hp]
+        apply modifyAt_congr_fun
         intro i v h₁ h₂
         split
         · rename_i hi
@@ -180,7 +179,7 @@ public theorem trsvLowerData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
           simp only [uget_eq_getElem, getElem_def, hp, getElem!_pos a (x.off + x.inc * j.toNat) (show _ < a.size by rw [h]; exact x.index_lt hj),
             getElem!_pos A.data (A.off + A.ld * j.toNat + j.toNat) (A.index_lt hj hj)]
         · rw [show j.toNat + 1 + (i - (j.toNat + 1)) = i by lia]
-      · intro k hk v
+      · intro k _ hk v
         rw [hr] at hk
         simp only [uget_eq_getElem, getElem_def, hp, getElem!_pos a (x.off + x.inc * j.toNat) (show _ < a.size by rw [h]; exact x.index_lt hj),
           USize.toNat_succ_add (show j.toNat + 1 + k.toNat < USize.size by lia)]
@@ -191,34 +190,34 @@ public theorem trsvLowerData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
 
 /-- After the steps `l < j`, the elements `i < j` are solved, and the others have their terms. -/
 theorem iterRange_trsvLowerStep (d : Diag) (A : Mat n n) (x : Vec n) {j : Nat} (hj : j ≤ n) :
-    iterRange (trsvLowerStep d A x) 0 j x.data = mapStride x.data x.off x.inc 0 n fun i v =>
+    iterRange (trsvLowerStep d A x) 0 j x.data = x.data.modifyAt x.stride.idx 0 n fun i v =>
       if i < j then trsvLower d A x i
       else Nat.fold j (fun l _ s => s - trsvLower d A x l * A.data[A.off + A.ld * l + i]!) v := by
   induction j with
   | zero =>
-    rw [iterRange_of_le _ (Nat.le_refl _), mapStride_congr (g' := fun _ v => v), mapStride_id]
+    rw [iterRange_self, modifyAt_congr_fun (g' := fun _ v => v), modifyAt_id]
     intro i v _ _
     simp
   | succ j ih =>
-    have hinc : 0 < x.inc ∨ j = 0 := by rcases x.inc_pos with h | h <;> lia
     rw [iterRange_succ _ (Nat.zero_le _), ih (by lia), trsvLowerStep]
-    have ht : (mapStride x.data x.off x.inc 0 n fun i v =>
+    have ht : (x.data.modifyAt x.stride.idx 0 n fun i v =>
           if i < j then trsvLower d A x i
           else Nat.fold j (fun l _ s => s - trsvLower d A x l * A.data[A.off + A.ld * l + i]!) v
         )[x.off + x.inc * j]! = Nat.fold j
           (fun l _ s => s - trsvLower d A x l * A.data[A.off + A.ld * l + j]!)
           x.data[x.off + x.inc * j]! := by
       rw [getElem!_pos _ (x.off + x.inc * j) (by simpa using x.index_lt (by lia : j < n)),
-        getElem_mapStride_stride _ _ _ _ _ _ ⟨Nat.zero_le _, by lia⟩ hinc
-          (x.index_lt (by lia)), ite_eq_right (Nat.lt_irrefl j),
+        Vec.getElem_modifyAt_stride x rfl (Nat.le_refl _) _ (Nat.zero_le _) (by lia),
+        ite_eq_right (Nat.lt_irrefl j),
         getElem!_pos x.data (x.off + x.inc * j) (x.index_lt (by lia))]
     have ht' : d.apply (Nat.fold j
           (fun l _ s => s - trsvLower d A x l * A.data[A.off + A.ld * l + j]!)
           x.data[x.off + x.inc * j]!) A.data[A.off + A.ld * j + j]! = trsvLower d A x j := by
       rw [trsvLower]
     simp only [ht, ht']
-    rw [mapStride_widen _ _ _ j n 0 n _ (Nat.zero_le _) (Nat.le_refl _), mapStride_mapStride]
-    apply mapStride_congr
+    rw [modifyAt_widen (lo := j) (hi := n) (lo' := 0) (hi' := n) _ _ _ (Nat.zero_le _) (by lia)
+      (Nat.le_refl _), modifyAt_modifyAt _ _ (x.fits.injOn (Nat.le_refl _))]
+    apply modifyAt_congr_fun
     intro i v _ hi
     by_cases h₁ : i < j
     · simp [h₁, show i < j + 1 by lia, show ¬j ≤ i by lia]
@@ -228,9 +227,9 @@ theorem iterRange_trsvLowerStep (d : Diag) (A : Mat n n) (x : Vec n) {j : Nat} (
 
 /-- The array of the lower solve is the array of `x` with its elements solved. -/
 public theorem trsvLowerData_eq (d : Diag) (A : Mat n n) (x : Vec n) :
-    trsvLowerData d A x = mapStride x.data x.off x.inc 0 n fun i _ => trsvLower d A x i := by
+    trsvLowerData d A x = x.data.modifyAt x.stride.idx 0 n fun i _ => trsvLower d A x i := by
   rw [trsvLowerData_eq_iterRange, iterRange_trsvLowerStep d A x (Nat.le_refl _)]
-  apply mapStride_congr
+  apply modifyAt_congr_fun
   intro i v _ hi
   simp [hi]
 
@@ -244,7 +243,7 @@ it.
     (b : Float64Array) : Float64Array :=
   let j := n - 1 - k
   let t := d.apply b[x.off + x.inc * j]! A.data[A.off + A.ld * j + j]!
-  mapStride b x.off x.inc 0 (j + 1) fun i v =>
+  b.modifyAt x.stride.idx 0 (j + 1) fun i v =>
     if i = j then t else v - t * A.data[A.off + A.ld * j + i]!
 
 /-- The array of the upper solve. -/
@@ -280,9 +279,8 @@ public theorem trsvUpperData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
   split
   · rename_i hs
     have hnu := x.toNat_toUSize hs.2
-    obtain ⟨hinc, hix⟩ := x.loop_facts hs.2
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_iter (F := trsvUpperStep d A x) (hF := by simp [trsvUpperStep])]
+    rw [Tail.run_forInFrom_unit (F := trsvUpperStep d A x) (hF := by simp [trsvUpperStep])]
     · simp only [Tail.run_done, USize.toNat_zero, hnu]
     · intro k _ hk next a h
       rw [hnu] at hk
@@ -292,16 +290,15 @@ public theorem trsvUpperData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
       have hp : (x.off.toUSize + x.inc.toUSize * (n.toUSize - 1 - k)).toNat =
           x.off + x.inc * (n - 1 - k.toNat) := by
         rw [x.toNat_index hs.2 (by lia), hj]
-      rw [run_forInFrom_stride (OFF := x.off) (INC := x.inc)
-        (hinc := by rw [hnu] at hinc; rcases hinc with h' | h' <;> lia)
-        (hix := fun i hi => hix i (by lia))
+      rw [Tail.run_forInFrom_modify (idx := x.stride.idx)
+        (he := fun i _ hi => x.toNat_index hs.2 (by lia))
         (G := fun i v => v - d.apply a[x.off + x.inc * (n - 1 - k.toNat)]!
             A.data[A.off + A.ld * (n - 1 - k.toNat) + (n - 1 - k.toNat)]! *
           A.data[A.off + A.ld * (n - 1 - k.toNat) + i]!)]
       · congr 1
         rw [trsvUpperStep, hj, USize.toNat_zero,
-          set_mapStride_pred _ _ _ _ _ _ (by rcases x.inc_pos with h' | h' <;> lia) _ hp]
-        apply mapStride_congr
+          set_modifyAt_pred _ (s := x.stride) (N := n) (by rw [h]; exact x.fits) (by lia) _ _ _ hp]
+        apply modifyAt_congr_fun
         intro i v _ _
         split
         · simp only [uget_eq_getElem, getElem_def, hp, hj,
@@ -310,7 +307,7 @@ public theorem trsvUpperData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
             getElem!_pos A.data (A.off + A.ld * (n - 1 - k.toNat) + (n - 1 - k.toNat))
               (A.index_lt (by lia) (by lia))]
         · rfl
-      · intro i hi v
+      · intro i _ hi v
         rw [hj] at hi
         simp only [uget_eq_getElem, getElem_def, hp, hj,
           getElem!_pos a (x.off + x.inc * (n - 1 - k.toNat))
@@ -325,19 +322,18 @@ public theorem trsvUpperData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
 After the steps `t < k`, the elements `i ≥ n - k` are solved, and the others have their terms.
 -/
 theorem iterRange_trsvUpperStep (d : Diag) (A : Mat n n) (x : Vec n) {k : Nat} (hk : k ≤ n) :
-    iterRange (trsvUpperStep d A x) 0 k x.data = mapStride x.data x.off x.inc 0 n fun i v =>
+    iterRange (trsvUpperStep d A x) 0 k x.data = x.data.modifyAt x.stride.idx 0 n fun i v =>
       if n - k ≤ i then trsvUpper d A x i
       else Nat.fold k (fun t _ s =>
         s - trsvUpper d A x (n - 1 - t) * A.data[A.off + A.ld * (n - 1 - t) + i]!) v := by
   induction k with
   | zero =>
-    rw [iterRange_of_le _ (Nat.le_refl _), mapStride_congr (g' := fun _ v => v), mapStride_id]
+    rw [iterRange_self, modifyAt_congr_fun (g' := fun _ v => v), modifyAt_id]
     intro i v _ hi
     simp [show ¬n ≤ i by lia]
   | succ k ih =>
-    have hinc : 0 < x.inc ∨ n - 1 - k = 0 := by rcases x.inc_pos with h | h <;> lia
     rw [iterRange_succ _ (Nat.zero_le _), ih (by lia), trsvUpperStep]
-    have ht : (mapStride x.data x.off x.inc 0 n fun i v =>
+    have ht : (x.data.modifyAt x.stride.idx 0 n fun i v =>
           if n - k ≤ i then trsvUpper d A x i
           else Nat.fold k (fun t _ s =>
             s - trsvUpper d A x (n - 1 - t) * A.data[A.off + A.ld * (n - 1 - t) + i]!) v
@@ -347,8 +343,8 @@ theorem iterRange_trsvUpperStep (d : Diag) (A : Mat n n) (x : Vec n) {k : Nat} (
           x.data[x.off + x.inc * (n - 1 - k)]! := by
       rw [getElem!_pos _ (x.off + x.inc * (n - 1 - k))
           (by simpa using x.index_lt (by lia : n - 1 - k < n)),
-        getElem_mapStride_stride _ _ _ _ _ _ ⟨Nat.zero_le _, by lia⟩ hinc
-          (x.index_lt (by lia)), ite_eq_right (by lia),
+        Vec.getElem_modifyAt_stride x rfl (Nat.le_refl _) _ (Nat.zero_le _) (by lia),
+        ite_eq_right (by lia),
         getElem!_pos x.data (x.off + x.inc * (n - 1 - k)) (x.index_lt (by lia))]
     have ht' : d.apply (Nat.fold k (fun t _ s =>
             s - trsvUpper d A x (n - 1 - t) *
@@ -358,9 +354,9 @@ theorem iterRange_trsvUpperStep (d : Diag) (A : Mat n n) (x : Vec n) {k : Nat} (
       rw [trsvUpper.eq_1 d A x (n - 1 - k)]
       rw [Nat.fold_congr (show n - 1 - (n - 1 - k) = k by lia)]
     simp only [ht, ht']
-    rw [mapStride_widen _ _ _ 0 (n - 1 - k + 1) 0 n _ (Nat.le_refl _) (by lia),
-      mapStride_mapStride]
-    apply mapStride_congr
+    rw [modifyAt_widen (lo := 0) (hi := n - 1 - k + 1) (lo' := 0) (hi' := n) _ _ _ (Nat.le_refl _)
+      (Nat.zero_le _) (by lia), modifyAt_modifyAt _ _ (x.fits.injOn (Nat.le_refl _))]
+    apply modifyAt_congr_fun
     intro i v _ hi
     by_cases h₁ : n - k ≤ i
     · simp [h₁, show n - (k + 1) ≤ i by lia, show ¬i < n - 1 - k + 1 by lia]
@@ -371,9 +367,9 @@ theorem iterRange_trsvUpperStep (d : Diag) (A : Mat n n) (x : Vec n) {k : Nat} (
 
 /-- The array of the upper solve is the array of `x` with its elements solved. -/
 public theorem trsvUpperData_eq (d : Diag) (A : Mat n n) (x : Vec n) :
-    trsvUpperData d A x = mapStride x.data x.off x.inc 0 n fun i _ => trsvUpper d A x i := by
+    trsvUpperData d A x = x.data.modifyAt x.stride.idx 0 n fun i _ => trsvUpper d A x i := by
   rw [trsvUpperData_eq_iterRange, iterRange_trsvUpperStep d A x (Nat.le_refl _)]
-  apply mapStride_congr
+  apply modifyAt_congr_fun
   intro i v _ hi
   simp
 
@@ -392,7 +388,7 @@ public theorem trsvUpperData_eq (d : Diag) (A : Mat n n) (x : Vec n) :
   | .upper => trsvUpperData d A x
 
 public theorem trsvData_eq (uplo : Uplo) (d : Diag) (A : Mat n n) (x : Vec n) :
-    trsvData uplo d A x = mapStride x.data x.off x.inc 0 n fun i _ => trsvSol uplo d A x i := by
+    trsvData uplo d A x = x.data.modifyAt x.stride.idx 0 n fun i _ => trsvSol uplo d A x i := by
   cases uplo
   · exact trsvUpperData_eq d A x
   · exact trsvLowerData_eq d A x
@@ -411,11 +407,11 @@ when `d` is `.unit`. Like the reference BLAS, it doesn't check for a zero on the
   off := x.off
   inc := x.inc
   inc_pos := x.inc_pos
-  bound := by rw [trsvData_eq, size_mapStride]; exact x.bound
+  bound := by rw [trsvData_eq, size_modifyAt]; exact x.bound
 
 /-- The array of `trsv uplo d A x` is the array of `x` with its elements solved. -/
 public theorem data_trsv (uplo : Uplo) (d : Diag) (A : Mat n n) (x : Vec n) :
-    (trsv uplo d A x).data = mapStride x.data x.off x.inc 0 n fun i _ => trsvSol uplo d A x i :=
+    (trsv uplo d A x).data = x.data.modifyAt x.stride.idx 0 n fun i _ => trsvSol uplo d A x i :=
   trsvData_eq uplo d A x
 
 @[simp] public theorem off_trsv (uplo : Uplo) (d : Diag) (A : Mat n n) (x : Vec n) :
@@ -427,7 +423,7 @@ public theorem data_trsv (uplo : Uplo) (d : Diag) (A : Mat n n) (x : Vec n) :
 /-- Element `i` of `trsv uplo d A x` is element `i` of the model. -/
 public theorem getElem_trsv (uplo : Uplo) (d : Diag) (A : Mat n n) (x : Vec n) (i : Nat)
     (h : i < n) : (trsv uplo d A x)[i] = trsvSol uplo d A x i :=
-  Vec.getElem_of_data_eq_mapStride _ (data_trsv uplo d A x) rfl rfl i h
+  Vec.getElem_of_data_eq_modifyAt _ (data_trsv uplo d A x) rfl rfl i h
 
 /--
 Element `i` of `y = trsv .lower d A x` is `x[i]`, minus the terms `y[l] * A[i, l]` for

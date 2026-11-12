@@ -108,7 +108,7 @@ theorem getElem!_sweep4 (a c : Float64Array) (cj cj' a₀ a₁ a₂ a₃ len hc 
   have hlen : len.toNat < USize.size := len.toNat_lt_size
   unfold sweep4
   simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-  rw [run_forInFrom_iter (F := fun i c =>
+  rw [Tail.run_forInFrom_unit (F := fun i c =>
       (c.set! (cj.toNat + i) (c[cj.toNat + i]! + t₀ * a[a₀.toNat + i]! + t₁ * a[a₁.toNat + i]! +
           t₂ * a[a₂.toNat + i]! + t₃ * a[a₃.toNat + i]!)).set! (cj'.toNat + i)
         (c[cj'.toNat + i]! + s₀ * a[a₀.toNat + i]! + s₁ * a[a₁.toNat + i]! +
@@ -143,7 +143,7 @@ theorem getElem!_sweep2 (a c : Float64Array) (cj cj' al len hc hc' ha) (t s : Fl
   have hlen : len.toNat < USize.size := len.toNat_lt_size
   unfold sweep2
   simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-  rw [run_forInFrom_iter (F := fun i c =>
+  rw [Tail.run_forInFrom_unit (F := fun i c =>
       (c.set! (cj.toNat + i) (c[cj.toNat + i]! + t * a[al.toNat + i]!)).set! (cj'.toNat + i)
         (c[cj'.toNat + i]! + s * a[al.toNat + i]!)) (hF := by simp)]
   · simp only [Tail.run_done, USize.toNat_zero]
@@ -170,7 +170,7 @@ theorem getElem!_sweep1 (a c : Float64Array) (cj al len hc ha) (t : Float)
   have hlen : len.toNat < USize.size := len.toNat_lt_size
   unfold sweep1
   simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-  rw [run_forInFrom_iter (F := fun i c =>
+  rw [Tail.run_forInFrom_unit (F := fun i c =>
       c.set! (cj.toNat + i) (c[cj.toNat + i]! + t * a[al.toNat + i]!)) (hF := by simp)]
   · simp only [Tail.run_done, USize.toNat_zero]
     rw [getElem!_iterRange_set! cj.toNat (fun i v => v + t * a[al.toNat + i]!) 0 len.toNat c p hp]
@@ -1004,7 +1004,7 @@ public theorem gemmBlocked_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : F
     have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt (show m < USize.size by lia)]
     have hnu : n.toUSize.toNat = n := by simp [Nat.mod_eq_of_lt (show n < USize.size by lia)]
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_iter (F := betaPass m β) (hF := size_betaPass m β)]
+    rw [Tail.run_forInFrom_unit (F := betaPass m β) (hF := size_betaPass m β)]
     · simp only [Tail.run_done]
       have hinv := gemmTermBlocks_inv α A B β C hs 0 (by simp) _
         (by rw [size_iterRange _ (size_betaPass m β), C.size_data])
@@ -1017,7 +1017,7 @@ public theorem gemmBlocked_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : F
       rfl
     · intro j _ hj next a h
       rw [hnu] at hj
-      rw [run_forInFrom_iter (F := fun i c => c.set! (m * j.toNat + i) (β * c[m * j.toNat + i]!))
+      rw [Tail.run_forInFrom_unit (F := fun i c => c.set! (m * j.toNat + i) (β * c[m * j.toNat + i]!))
           (hF := by simp)]
       · simp only [USize.toNat_zero, hmu, betaPass]
       · intro i _ hi next' a' h'

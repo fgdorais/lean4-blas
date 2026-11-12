@@ -45,7 +45,8 @@ as an exact `Float` equality, in the order the routine evaluates:
 
 The updates work in place when their output vector's array is not shared, and copy it once
 otherwise. They leave the elements of the array outside the vector unchanged: `data_axpy` and the
-other `data_` lemmas give the whole array as a `mapStride` of the old one. The loops are the same
+other `data_` lemmas give the whole array as a scalar-arrays `modifyAt` of the old one, at the
+indices `x.stride.idx i` of the vector. The loops are the same
 for every stride, and run as fast at stride `1` as loops over contiguous indices.
 `nrm2` doesn't scale its elements, so unlike the reference BLAS it can overflow or underflow.
 

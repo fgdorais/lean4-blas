@@ -271,31 +271,35 @@ public theorem getElem_of_data_eq_mapMat {A B : Mat m n} (g : Nat → Nat → Fl
     simp only [hd, ho, hl]
   rw [e, getElem_mapMat_index _ _ _ _ _ _ _ h.1 A.le_ld ⟨Nat.zero_le _, h.2⟩ hq]
 
-/-- Mapping column `n` of a matrix, as a stride of `1`, adds it to the columns before it. -/
-theorem mapStride_mapMat (a : Float64Array) (off ld : Nat) (hml : m ≤ ld) (j : Nat)
+/-- Mapping column `j` of a matrix, as a stride of `1`, adds it to the columns before it. -/
+theorem modifyAt_col_mapMat (a : Float64Array) (off ld : Nat) (hml : m ≤ ld) (j : Nat)
     (g : Nat → Nat → Float → Float) :
-    mapStride (mapMat a off ld m 0 j g) (off + ld * j) 1 0 m (fun i v => g i j v) =
+    (mapMat a off ld m 0 j g).modifyAt (Stride.mk (off + ld * j) 1).idx 0 m (fun i v => g i j v) =
       mapMat a off ld m 0 (j + 1) g := by
+  have hinj : ∀ i, 0 ≤ i → i < m → ∀ i', 0 ≤ i' → i' < m →
+      (Stride.mk (off + ld * j) 1).idx i = (Stride.mk (off + ld * j) 1).idx i' → i = i' :=
+    fun i _ _ i' _ _ e => by simp only [Stride.idx] at e; lia
   apply ext_getElem (by simp)
   intro p h₁ h₂
   simp only [size_mapMat] at h₂
   by_cases hw : ∃ i, i < m ∧ p = off + ld * j + i
   · obtain ⟨i, hi, rfl⟩ := hw
     have e : ∀ (b : Float64Array) (h : off + ld * j + i < b.size),
-        b[off + ld * j + i] = b[off + ld * j + 1 * i]'(by rw [Nat.one_mul]; exact h) := by
-      intro b h; simp only [Nat.one_mul]
-    rw [e _ h₁, getElem_mapStride_stride _ _ _ _ _ _ ⟨Nat.zero_le _, hi⟩ (Or.inl Nat.one_pos)
-      (by simpa using h₂), getElem_mapMat_index _ _ _ _ _ _ _ hi hml ⟨Nat.zero_le _, by lia⟩ h₂]
-    simp only [Nat.one_mul]
+        b[off + ld * j + i] = b[(Stride.mk (off + ld * j) 1).idx i]'(by
+          simp only [Stride.idx, Nat.one_mul]; exact h) := by
+      intro b h; simp only [Stride.idx, Nat.one_mul]
+    rw [e _ h₁, getElem_modifyAt_idx _ _ _ hinj (Nat.zero_le _) hi,
+      getElem_mapMat_index _ _ _ _ _ _ _ hi hml ⟨Nat.zero_le _, by lia⟩ h₂]
+    simp only [Stride.idx, Nat.one_mul]
     rw [getElem_mapMat_of_ne _ _ _ _ _ _ _ ?_ (by simpa using h₂)]
     intro i' j' hi' _ hj' he
     have h₁ := mat_index (off := off) (j := j) (show i < ld by lia)
     have h₂ := mat_index (off := off) (j := j') (show i' < ld by lia)
     rw [he] at h₁
     lia
-  · have hne : ∀ i, 0 ≤ i → i < m → p ≠ off + ld * j + 1 * i :=
-      fun i _ hi e => hw ⟨i, hi, by lia⟩
-    rw [getElem_mapStride_of_ne _ _ _ _ _ _ hne (by simpa using h₂)]
+  · have hne : ∀ i, 0 ≤ i → i < m → (Stride.mk (off + ld * j) 1).idx i ≠ p :=
+      fun i _ hi e => hw ⟨i, hi, by simp only [Stride.idx] at e; lia⟩
+    rw [getElem_modifyAt_of_forall_ne _ _ _ hne]
     simp only [mapMat, Float64Array.getElem_ofFn]
     by_cases hc : off ≤ p ∧ (p - off) % ld < m
     · have e := eq_mat_index (ld := ld) hc.1
@@ -309,13 +313,13 @@ theorem mapStride_mapMat (a : Float64Array) (off ld : Nat) (hml : m ≤ ld) (j :
 /-- Steps that each map column `j` of a matrix, as a stride of `1`, map the whole matrix. -/
 public theorem iterRange_cols (a : Float64Array) (off ld : Nat) (hml : m ≤ ld) (n : Nat)
     (G : Nat → Nat → Float → Float) :
-    iterRange (fun j c => mapStride c (off + ld * j) 1 0 m (G j)) 0 n a =
+    iterRange (fun j c => c.modifyAt (Stride.mk (off + ld * j) 1).idx 0 m (G j)) 0 n a =
       mapMat a off ld m 0 n fun i j v => G j i v := by
   induction n with
-  | zero => rw [iterRange_of_le _ (Nat.le_refl _), mapMat_of_le _ _ _ _ _ _ _ (Nat.le_refl _)]
+  | zero => rw [iterRange_self, mapMat_of_le _ _ _ _ _ _ _ (Nat.le_refl _)]
   | succ n ih =>
     rw [iterRange_succ _ (Nat.zero_le _), ih]
-    exact mapStride_mapMat a off ld hml n _
+    exact modifyAt_col_mapMat a off ld hml n _
 
 /-! ## Packing -/
 
