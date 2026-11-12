@@ -6,4 +6,5 @@ module
 
 import BLASTest.Basic
 import BLASTest.Float64.Level1
+import BLASTest.Float64.Level2
 import BLASTest.Float64.Level3

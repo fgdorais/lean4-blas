@@ -189,7 +189,7 @@ def rows (rounds n : Nat) : IO (List Row) := do
   -- A baseline for the harness: a plain read-only loop over each array.
   let sum ← time rounds n fun _ => x.foldl (· + ·) 0
   let sum' ← time rounds n fun _ => x'.foldl (· + ·) 0
-  let v : BLAS.Float64.Vec n := ⟨x, by simp [x, vec]⟩
+  let v : BLAS.Float64.Vec n := .ofArray x (by simp [x, vec])
   let axpy ← time rounds n fun _ => Id.run do
     let mut z := v
     for _ in [0:reps] do
@@ -228,10 +228,21 @@ def rows (rounds n : Nat) : IO (List Row) := do
   let up : BLAS.Float64.Vec n := .ofFn fun i => i.val.toFloat
   let iamaxUp ← time rounds n fun _ => (BLAS.Float64.Vec.iamax up).toFloat
   let iamaxUp' ← time rounds n fun _ => (refIamax up.data).toFloat
+  -- Strided vectors: every other element of an array of `2 * n`, against the contiguous ones.
+  let x2 := vec (2 * n)
+  let v2 : BLAS.Float64.Vec n := (BLAS.Float64.Vec.ofStride? x2 0 2).getD v
+  let axpy2 ← time rounds n fun _ => Id.run do
+    let mut z := v2
+    for _ in [0:reps] do
+      z := BLAS.Float64.Vec.axpy 0.5 v2 z
+    return z.data[0]!
+  let dot2 ← time rounds n fun _ => BLAS.Float64.Vec.dot v2 v2
   return [⟨"sum (baseline)", sum, some sum'⟩, ⟨s!"axpy ×{reps}", axpy, some axpy'⟩,
     ⟨s!"scal ×{reps}", scal, some scal'⟩, ⟨s!"copy ×{reps}", copy, none⟩,
     ⟨"dot", dot, some dot'⟩, ⟨"asum", asum, some asum'⟩, ⟨"nrm2", nrm2, some nrm2'⟩,
-    ⟨"iamax", iamax, some iamax'⟩, ⟨"iamax (increasing)", iamaxUp, some iamaxUp'⟩]
+    ⟨"iamax", iamax, some iamax'⟩, ⟨"iamax (increasing)", iamaxUp, some iamaxUp'⟩,
+    ⟨s!"axpy ×{reps}, stride 2 / stride 1", axpy2, some axpy⟩,
+    ⟨"dot, stride 2 / stride 1", dot2, some dot⟩]
 
 /-- An `m × m` matrix computed from its indices. -/
 def mat (m s : Nat) : BLAS.Float64.Mat m m :=
@@ -253,7 +264,66 @@ def gemmRows (rounds m : Nat) : IO (List Row × Nat) := do
   let t ← time rounds m fun q => (BLAS.Float64.Mat.gemm (α q) A B 0.5 C).data[0]!
   let t' ← time rounds m fun q => (refGemm m.toUSize (α q) A.data B.data 0.5 C.data)[0]!
   let tb ← time rounds m fun q => (BLAS.Float64.Mat.gemmBlocked (α q) A B 0.5 C).data[0]!
-  return ([⟨s!"gemm {m}", t, some t'⟩, ⟨s!"gemmBlocked {m}", tb, some t'⟩], 2 * m * m * m)
+  -- The same matrices as blocks of larger ones, with the leading dimension `m + 8`: they are
+  -- packed, and the result is copied back into `C`'s array.
+  let ld (X : BLAS.Float64.Mat m m) : BLAS.Float64.Mat m m :=
+    (BLAS.Float64.Mat.ofLd? (vec ((m + 8) * m)) 0 (m + 8)).getD X
+  let A₁ := ld A
+  let B₁ := ld B
+  let C₁ := ld C
+  let tl ← time rounds m fun q => (BLAS.Float64.Mat.gemmBlocked (α q) A₁ B₁ 0.5 C₁).data[0]!
+  return ([⟨s!"gemm {m}", t, some t'⟩, ⟨s!"gemmBlocked {m}", tb, some t'⟩,
+    ⟨s!"gemmBlocked {m}, ld = {m} + 8 / ld = {m}", tl, some tb⟩], 2 * m * m * m)
+
+/-- The sizes of the Level 2 benchmarks. -/
+def level2Sizes : List Nat := [256, 1024, 2048]
+
+/--
+The Level 2 benchmarks for `m × m` matrices, ten calls per round: `gemv`, `gemvT` and `ger`, on
+packed operands, `gemv` with `x` and `y` at stride 2, and `trsv` on both triangles. Each makes
+`2 * m * m` floating-point operations per call, except `trsv`, which makes about `m * m`.
+-/
+def level2Rows (rounds m : Nat) : IO (List Row × Nat) := do
+  let A := mat m 1
+  let x : BLAS.Float64.Vec m := .ofArray (vec m) (by simp [vec])
+  let x2 : BLAS.Float64.Vec m := (BLAS.Float64.Vec.ofStride? (vec (2 * m)) 0 2).getD x
+  let α (q : Nat) := 1.5 + (q - m).toFloat
+  let tv ← time rounds m fun q => Id.run do
+    let mut y := x
+    for _ in [0:reps] do
+      y := BLAS.Float64.Mat.gemv (α q) A x 0.5 y
+    return y.data[0]!
+  let tt ← time rounds m fun q => Id.run do
+    let mut y := x
+    for _ in [0:reps] do
+      y := BLAS.Float64.Mat.gemvT (α q) A x 0.5 y
+    return y.data[0]!
+  let tg ← time rounds m fun q => Id.run do
+    let mut B := A
+    for _ in [0:reps] do
+      B := BLAS.Float64.Mat.ger (α q) x x B
+    return B.data[0]!
+  let tv2 ← time rounds m fun q => Id.run do
+    let mut y := x2
+    for _ in [0:reps] do
+      y := BLAS.Float64.Mat.gemv (α q) A x2 0.5 y
+    return y.data[0]!
+  let T : BLAS.Float64.Mat m m := .ofFn fun i j =>
+    if i.val = j.val then (m + 4 + i.val).toFloat else ((i.val * 7 + j.val * 13) % 11).toFloat - 5
+  let tl ← time rounds m fun q => Id.run do
+    let mut y := BLAS.Float64.Vec.scal (α q) x
+    for _ in [0:reps] do
+      y := BLAS.Float64.Mat.trsv .lower .nonUnit T y
+    return y.data[0]!
+  let tu ← time rounds m fun q => Id.run do
+    let mut y := BLAS.Float64.Vec.scal (α q) x
+    for _ in [0:reps] do
+      y := BLAS.Float64.Mat.trsv .upper .nonUnit T y
+    return y.data[0]!
+  return ([⟨s!"gemv {m} ×{reps}", tv, none⟩, ⟨s!"gemvT {m} ×{reps}", tt, none⟩,
+    ⟨s!"ger {m} ×{reps}", tg, none⟩, ⟨s!"gemv {m} ×{reps}, stride 2 / stride 1", tv2, some tv⟩,
+    ⟨s!"trsv lower {m} ×{reps}", tl, none⟩, ⟨s!"trsv upper {m} ×{reps}", tu, none⟩],
+    2 * m * m * reps)
 
 /-- A time in milliseconds with three decimals. -/
 def fmt (t : Float) : String :=
@@ -273,7 +343,8 @@ public def main (args : List String) : IO Unit := do
   let rounds := nums[1]?.getD 10
   let rows ← rows rounds n
   let gemm ← gemmSizes.mapM (gemmRows rounds)
-  let rows := rows ++ (gemm.map (·.1)).flatten
+  let level2 ← level2Sizes.mapM (level2Rows rounds)
+  let rows := rows ++ (level2.map (·.1)).flatten ++ (gemm.map (·.1)).flatten
   if tsv then
     for r in rows do
       IO.println s!"{r.name}\t{fmt r.time}"
@@ -286,11 +357,22 @@ public def main (args : List String) : IO Unit := do
         | some c => (fmt c, fmt (r.time / c))
         | none => ("—", "—")
       IO.println s!"| {r.name} | {fmt r.time} | {c} | {ratio} |"
+    IO.println "\nLevel 2 on square matrices, in GFLOP/s.\n"
+    IO.println "| Size | gemv | gemvT | ger | gemv, stride 2 | trsv, lower | trsv, upper |"
+    IO.println "|--:|--:|--:|--:|--:|--:|--:|"
+    for (rs, flops) in level2, m in level2Sizes do
+      let g (t : Float) := fmt (flops.toFloat / (t * 1e6))
+      match rs with
+      | [v, t, r, v2, tl, tu] =>
+        IO.println
+          s!"| {m} | {g v.time} | {g t.time} | {g r.time} | {g v2.time} | {g (2 * tl.time)} | {g (2 * tu.time)} |"
+      | _ => pure ()
     IO.println "\n`gemm` of square matrices, in GFLOP/s.\n"
-    IO.println "| Size | gemm | gemmBlocked | Reference |"
-    IO.println "|--:|--:|--:|--:|"
+    IO.println "| Size | gemm | gemmBlocked | gemmBlocked, ld = m + 8 | Reference |"
+    IO.println "|--:|--:|--:|--:|--:|"
     for (rs, flops) in gemm, m in gemmSizes do
       let g (t : Float) := fmt (flops.toFloat / (t * 1e6))
       match rs with
-      | [r, rb] => IO.println s!"| {m} | {g r.time} | {g rb.time} | {(r.ref.map g).getD "—"} |"
+      | [r, rb, rl] =>
+        IO.println s!"| {m} | {g r.time} | {g rb.time} | {g rl.time} | {(r.ref.map g).getD "—"} |"
       | _ => pure ()
