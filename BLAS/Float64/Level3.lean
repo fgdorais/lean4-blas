@@ -61,9 +61,9 @@ public def gemm (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMa
     let mu := m.toUSize
     let nu := n.toUSize
     let ku := k.toUSize
-    have hmu : mu.toNat = m := by simp [mu, Nat.mod_eq_of_lt hs.2.2.2.1]
-    have hnu : nu.toNat = n := by simp [nu, Nat.mod_eq_of_lt hs.2.2.2.2.1]
-    have hku : ku.toNat = k := by simp [ku, Nat.mod_eq_of_lt hs.2.2.2.2.2]
+    have hmu : mu.toNat = m := by grind
+    have hnu : nu.toNat = n := by grind
+    have hku : ku.toNat = k := by grind
     let a := A.data
     let b := B.data
     have ha : a.size = m * k := A.size_data
@@ -74,16 +74,16 @@ public def gemm (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMa
       for j in 0...nu do
         let cj := mu * j
         have hcj : cj.toNat + mu.toNat ≤ c.size :=
-          toNat_mul_add_le (n := n) (by lia) (by rw [hmu, hc]; exact Nat.le_refl _) (by rw [hc]; exact hs.1)
+          toNat_mul_add_le (n := n) (by lia) (by rw [hmu, hc]; exact Nat.le_refl _)
         for i in 0...mu do
           c[cj + i] := β * c[cj + i]
         for l in 0...ku do
           let al := mu * l
           have hal : al.toNat + mu.toNat ≤ a.size :=
-            toNat_mul_add_le (n := k) (by lia) (by rw [hmu, ha]; exact Nat.le_refl _) (by rw [ha]; exact hs.2.1)
+            toNat_mul_add_le (n := k) (by lia) (by rw [hmu, ha]; exact Nat.le_refl _)
           let bj := ku * j
           have hbj : bj.toNat + ku.toNat ≤ b.size :=
-            toNat_mul_add_le (n := n) (by lia) (by rw [hku, hb]; exact Nat.le_refl _) (by rw [hb]; exact hs.2.2.1)
+            toNat_mul_add_le (n := n) (by lia) (by rw [hku, hb]; exact Nat.le_refl _)
           let t := α * b.uget (bj + l) (InPlaceSyntax.toNat_add_lt_of_window hbj (by lia))
           for i in 0...mu do
             c[cj + i] := c[cj + i] +
@@ -142,9 +142,9 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
   unfold gemm
   split
   · rename_i hs
-    have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt hs.2.2.2.1]
-    have hnu : n.toUSize.toNat = n := by simp [Nat.mod_eq_of_lt hs.2.2.2.2.1]
-    have hku : k.toUSize.toNat = k := by simp [Nat.mod_eq_of_lt hs.2.2.2.2.2]
+    have hmu : m.toUSize.toNat = m := by grind
+    have hnu : n.toUSize.toNat = n := by grind
+    have hku : k.toUSize.toNat = k := by grind
     have hA := A.size_data
     have hB := B.size_data
     have hC := C.size_data

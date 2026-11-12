@@ -57,7 +57,7 @@ public theorem getElem_modifyAt_stride (x : Vec n) {a : Float64Array} (ha : a.si
 /-- The number of elements `n` as a `USize`, in a vector whose array has a `USize` size. -/
 public theorem toNat_toUSize (x : Vec n) (hs : x.data.size < USize.size) : n.toUSize.toNat = n := by
   have := x.le_size
-  simp [Nat.mod_eq_of_lt (show n < USize.size by lia)]
+  grind
 
 /-- The `USize` indices of the loop of a vector update, from the step `0`, don't wrap. -/
 public theorem loop_idx (x : Vec n) (hs : x.data.size < USize.size) :
@@ -333,11 +333,7 @@ public def iamaxLoop (x : Vec n) (o c : USize) (ho : x.off.toUSize = o) (hc : x.
 termination_by m.toNat - i.toNat
 decreasing_by
   all_goals
-    rw [USize.lt_iff_toNat_lt] at hi
-    have : m.toNat < USize.size := m.toNat_lt_size
-    have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-    rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]
-    lia
+    grind
 
 private theorem iamaxLoop_eq (x : Vec n) (o c : USize) (ho : x.off.toUSize = o)
     (hc : x.inc.toUSize = c) (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float)
@@ -347,16 +343,12 @@ private theorem iamaxLoop_eq (x : Vec n) (o c : USize) (ho : x.off.toUSize = o)
   obtain ⟨d, hd⟩ : ∃ d, n - j = d := ⟨_, rfl⟩
   induction d generalizing i k a j with
   | zero =>
-    rw [iamaxLoop, dite_eq_right_of_eq_false (eq_false (by rw [USize.lt_iff_toNat_lt]; lia))]
+    rw [iamaxLoop, dite_eq_right_of_eq_false (eq_false (by grind))]
     obtain rfl : j = n := by lia
     rw [hacc]
   | succ d ih =>
-    have hi : i < m := by rw [USize.lt_iff_toNat_lt]; lia
-    have hsucc : (i + 1).toNat = j + 1 := by
-      have : m.toNat < USize.size := m.toNat_lt_size
-      have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-      rw [USize.lt_iff_toNat_lt] at hi
-      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia), hj]
+    have hi : i < m := by grind
+    have hsucc : (i + 1).toNat = j + 1 := by grind
     have hstep : Nat.fold (j + 1) (fun l hl => iamaxStep x l (by lia)) (0, 0) =
         iamaxStep x j (by lia) (k.toNat, a) := by
       rw [Nat.fold_succ, hacc]

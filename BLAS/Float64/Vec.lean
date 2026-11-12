@@ -82,7 +82,7 @@ public theorem toNat_index_shift (x : Vec n) (hs : x.data.size < USize.size) {j 
     (x.off.toUSize + x.inc.toUSize * (j + 1) + x.inc.toUSize * k).toNat =
       x.off + x.inc * (j.toNat + 1) + x.inc * k.toNat := by
   have hn := x.le_size
-  have hjk := USize.toNat_succ_add (j := j) (k := k) (by lia)
+  have hjk : (j + 1 + k).toNat = j.toNat + 1 + k.toNat := by grind
   rw [USize.add_assoc, ← USize.mul_add, x.toNat_index hs (i := j + 1 + k) (by lia), hjk,
     Nat.mul_add x.inc (j.toNat + 1), Nat.add_assoc]
 
