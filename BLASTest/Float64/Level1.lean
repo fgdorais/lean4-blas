@@ -14,6 +14,12 @@ open BLAS.Float64
 /-- The vector `[0, 1, …, n - 1]` scaled by `c`. -/
 def ramp (n : Nat) (c : Float := 1) : Vec n := .ofFn fun i => c * i.val.toFloat
 
+/--
+The address of the array of `x`, with `x`. It is not inlined, so the address is taken before `x`
+goes on to a routine, and doesn't keep the array alive past it.
+-/
+@[noinline] def withAddr (x : Vec n) : USize × Vec n := (BLASTest.addr x.data, x)
+
 /-! ## `axpy` -/
 
 #guard (Vec.axpy 2 (.ofList (n := 3) [1, 2, 3]) (.ofList (n := 3) [10, 20, 30])).toList == [12, 24, 36]
@@ -37,8 +43,7 @@ def ramp (n : Nat) (c : Float := 1) : Vec n := .ofFn fun i => c * i.val.toFloat
 
 /-- Whether `axpy` updates an unshared `y` in place. -/
 def axpyInPlace (n : Nat) : Bool :=
-  let y := ramp n
-  let p := BLASTest.addr y.data
+  let (p, y) := withAddr (ramp n)
   let z := Vec.axpy 2 (ramp n 3) y
   BLASTest.addr z.data == p
 
@@ -61,8 +66,7 @@ def axpyInPlace (n : Nat) : Bool :=
 
 /-- Whether `scal` updates an unshared `x` in place. -/
 def scalInPlace (n : Nat) : Bool :=
-  let x := ramp n
-  let p := BLASTest.addr x.data
+  let (p, x) := withAddr (ramp n)
   BLASTest.addr (Vec.scal 2 x).data == p
 
 #guard scalInPlace 8
@@ -79,8 +83,7 @@ def scalInPlace (n : Nat) : Bool :=
 
 /-- Whether `copy` writes into an unshared `y`. -/
 def copyInPlace (n : Nat) : Bool :=
-  let y := ramp n
-  let p := BLASTest.addr y.data
+  let (p, y) := withAddr (ramp n)
   BLASTest.addr (Vec.copy (ramp n 2) y).data == p
 
 #guard copyInPlace 8
@@ -118,3 +121,55 @@ def copyInPlace (n : Nat) : Bool :=
 #guard Vec.iamax (.ofList (n := 3) [0 / 0, 5, 7]) == 0
 #guard Vec.iamax (.ofList (n := 3) [1, 0 / 0, 7]) == 2
 #guard Vec.iamax (.ofList (n := 3) [1, -1 / 0, 7]) == 1
+
+/-! ## Strided vectors -/
+
+/--
+The vector `[0, c, …, c * (n - 1)]` at the offset `off` with the stride `inc`, in an array whose
+other elements are `-1`.
+-/
+def strided (n off inc : Nat) (c : Float := 1) : Vec n :=
+  let a := ScalarArray.Float64Array.ofFn (n := off + inc * n) fun p =>
+    if off ≤ p.val ∧ (p.val - off) % inc = 0 then c * ((p.val - off) / inc).toFloat else -1
+  (Vec.ofStride? a off.toUSize inc.toUSize).getD (.ofFn fun _ => 0 / 0)
+
+/-- The number of elements `-1` in the array of `x`: those outside a strided vector. -/
+def outside (x : Vec n) : Nat := x.data.toList.countP (· == -1)
+
+#guard (strided 4 3 2).toList == [0, 1, 2, 3]
+#guard (strided 4 3 2).data.size == 11
+#guard outside (strided 4 3 2) == 7
+#guard (Vec.ofStride? (n := 3) (.ofList [1, 2, 3, 4]) 1 2).isNone
+#guard (Vec.ofStride? (n := 2) (.ofList [1, 2, 3, 4]) 1 0).isNone
+#guard ((Vec.ofStride? (n := 1) (.ofList [1, 2, 3, 4]) 3 0).map Vec.toList) == some [4]
+
+-- The updates change the elements of the vector, and only them.
+#guard
+  let z := Vec.axpy 2 (strided 5 1 3) (strided 5 2 2 0.5)
+  z.toList == (Vec.axpy 2 (ramp 5) (ramp 5 0.5)).toList && outside z == outside (strided 5 2 2)
+#guard
+  let z := Vec.scal 3 (strided 5 4 3)
+  z.toList == (ramp 5 3).toList && outside z == outside (strided 5 4 3)
+#guard
+  let z := Vec.copy (ramp 5 2) (strided 5 1 4)
+  z.toList == (ramp 5 2).toList && outside z == outside (strided 5 1 4)
+#guard (Vec.copy (strided 5 1 4 2) (ramp 5)).toList == (ramp 5 2).toList
+
+-- Every element, past 16 bits of index, with a stride.
+#guard
+  let n := 70000
+  let z := Vec.axpy 2 (strided n 0 3) (strided n 5 2 0.5)
+  (List.range n).all fun i => z.toList[i]! == 2.5 * i.toFloat
+
+/-- Whether `axpy` updates an unshared strided `y` in place. -/
+def axpyInPlaceStrided (n : Nat) : Bool :=
+  let (p, y) := withAddr (strided n 1 3)
+  let z := Vec.axpy 2 (ramp n 3) y
+  BLASTest.addr z.data == p
+
+#guard axpyInPlaceStrided 8
+
+#guard Vec.dot (strided 4 1 3) (strided 4 0 2 2) == Vec.dot (ramp 4) (ramp 4 2)
+#guard Vec.asum (strided 4 2 5 (-1)) == 6
+#guard Vec.nrm2 (strided 2 7 2 1) == 1
+#guard Vec.iamax (strided 6 1 2 (-1)) == 5

@@ -189,7 +189,7 @@ def rows (rounds n : Nat) : IO (List Row) := do
   -- A baseline for the harness: a plain read-only loop over each array.
   let sum ← time rounds n fun _ => x.foldl (· + ·) 0
   let sum' ← time rounds n fun _ => x'.foldl (· + ·) 0
-  let v : BLAS.Float64.Vec n := ⟨x, by simp [x, vec]⟩
+  let v : BLAS.Float64.Vec n := .ofArray x (by simp [x, vec])
   let axpy ← time rounds n fun _ => Id.run do
     let mut z := v
     for _ in [0:reps] do
@@ -228,10 +228,21 @@ def rows (rounds n : Nat) : IO (List Row) := do
   let up : BLAS.Float64.Vec n := .ofFn fun i => i.val.toFloat
   let iamaxUp ← time rounds n fun _ => (BLAS.Float64.Vec.iamax up).toFloat
   let iamaxUp' ← time rounds n fun _ => (refIamax up.data).toFloat
+  -- Strided vectors: every other element of an array of `2 * n`, against the contiguous ones.
+  let x2 := vec (2 * n)
+  let v2 : BLAS.Float64.Vec n := (BLAS.Float64.Vec.ofStride? x2 0 2).getD v
+  let axpy2 ← time rounds n fun _ => Id.run do
+    let mut z := v2
+    for _ in [0:reps] do
+      z := BLAS.Float64.Vec.axpy 0.5 v2 z
+    return z.data[0]!
+  let dot2 ← time rounds n fun _ => BLAS.Float64.Vec.dot v2 v2
   return [⟨"sum (baseline)", sum, some sum'⟩, ⟨s!"axpy ×{reps}", axpy, some axpy'⟩,
     ⟨s!"scal ×{reps}", scal, some scal'⟩, ⟨s!"copy ×{reps}", copy, none⟩,
     ⟨"dot", dot, some dot'⟩, ⟨"asum", asum, some asum'⟩, ⟨"nrm2", nrm2, some nrm2'⟩,
-    ⟨"iamax", iamax, some iamax'⟩, ⟨"iamax (increasing)", iamaxUp, some iamaxUp'⟩]
+    ⟨"iamax", iamax, some iamax'⟩, ⟨"iamax (increasing)", iamaxUp, some iamaxUp'⟩,
+    ⟨s!"axpy ×{reps}, stride 2 / stride 1", axpy2, some axpy⟩,
+    ⟨"dot, stride 2 / stride 1", dot2, some dot⟩]
 
 /-- An `m × m` matrix computed from its indices. -/
 def mat (m s : Nat) : BLAS.Float64.Mat m m :=

@@ -366,4 +366,202 @@ public theorem run_forInFrom_iter {n : Nat} {γ : Type} (lo hi j₀ : USize)
     congr 1
     rw [hsucc, iterRange_of_lt F hj']
 
+/-! ## Strides -/
+
+/--
+The array `a` with `g i a[off + inc * i]` at the indices `off + inc * i`, for `lo ≤ i < hi`. For
+`inc = 0`, only the index `off`, for `i = 0`, is changed.
+-/
+public def mapStride (a : Float64Array) (off inc lo hi : Nat) (g : Nat → Float → Float) :
+    Float64Array :=
+  .ofFn (n := a.size) fun p =>
+    if off ≤ p.val ∧ (p.val - off) % inc = 0 ∧ lo ≤ (p.val - off) / inc ∧ (p.val - off) / inc < hi
+    then g ((p.val - off) / inc) a[p.val] else a[p.val]
+
+@[simp] public theorem size_mapStride (a : Float64Array) (off inc lo hi g) :
+    (mapStride a off inc lo hi g).size = a.size := by
+  simp [mapStride]
+
+/-- The index `off + inc * i` of a stride is the step `i`, for `inc > 0` or `i = 0`. -/
+theorem stride_index {off inc i : Nat} (h : 0 < inc ∨ i = 0) :
+    off ≤ off + inc * i ∧ (off + inc * i - off) % inc = 0 ∧ (off + inc * i - off) / inc = i := by
+  refine ⟨Nat.le_add_right _ _, ?_⟩
+  rw [Nat.add_sub_cancel_left]
+  rcases h with h | rfl
+  · exact ⟨Nat.mul_mod_right _ _, Nat.mul_div_cancel_left _ h⟩
+  · simp
+
+/-- An index `p ≥ off` with `(p - off) % inc = 0` is `off + inc * ((p - off) / inc)`. -/
+theorem eq_stride_of_mod {off inc p : Nat} (h₁ : off ≤ p) (h₂ : (p - off) % inc = 0) :
+    p = off + inc * ((p - off) / inc) := by
+  have := Nat.mod_add_div (p - off) inc
+  omega
+
+/-- The element of a stride. -/
+public theorem getElem_mapStride_stride (a : Float64Array) (off inc lo hi g) {i : Nat}
+    (hr : lo ≤ i ∧ i < hi) (hinc : 0 < inc ∨ i = 0) (h : off + inc * i < a.size) :
+    (mapStride a off inc lo hi g)[off + inc * i]'(by simpa using h) = g i a[off + inc * i] := by
+  obtain ⟨h₁, h₂, h₃⟩ := stride_index (off := off) hinc
+  simp only [mapStride, getElem_ofFn]
+  rw [ite_eq_left (by rw [h₃]; exact ⟨h₁, h₂, hr⟩), h₃]
+
+/-- An element at no index of the stride is unchanged. -/
+public theorem getElem_mapStride_of_ne (a : Float64Array) (off inc lo hi g) {p : Nat}
+    (hp : ∀ i, lo ≤ i → i < hi → p ≠ off + inc * i) (h : p < a.size) :
+    (mapStride a off inc lo hi g)[p]'(by simpa using h) = a[p] := by
+  simp only [mapStride, getElem_ofFn]
+  rw [ite_eq_right]
+  intro ⟨h₁, h₂, h₃, h₄⟩
+  exact hp _ h₃ h₄ (eq_stride_of_mod h₁ h₂)
+
+public theorem mapStride_of_le (a : Float64Array) (off inc lo hi g) (h : hi ≤ lo) :
+    mapStride a off inc lo hi g = a := by
+  apply ext_getElem (by simp)
+  intro p _ hp
+  exact getElem_mapStride_of_ne a off inc lo hi g (fun i h₁ h₂ => by omega) hp
+
+/-- The first step of a stride comes first. -/
+theorem mapStride_set (a : Float64Array) (off inc lo hi : Nat) (g : Nat → Float → Float)
+    (hlo : lo < hi) (hinc : 0 < inc ∨ hi ≤ 1) (h : off + inc * lo < a.size) :
+    mapStride (a.set (off + inc * lo) (g lo a[off + inc * lo]) h) off inc (lo + 1) hi g =
+      mapStride a off inc lo hi g := by
+  have hinc' : 0 < inc ∨ lo = 0 := by omega
+  apply ext_getElem (by simp)
+  intro p hp _
+  simp only [size_mapStride, size_set] at hp
+  by_cases hq : p = off + inc * lo
+  · subst hq
+    rw [getElem_mapStride_stride a off inc lo hi g ⟨Nat.le_refl _, hlo⟩ hinc' h,
+      getElem_mapStride_of_ne _ _ _ _ _ _ _ (by simpa using h)]
+    · simp
+    · intro i h₁ _ e
+      rcases hinc with hinc | hinc
+      · have : inc * lo < inc * i := Nat.mul_lt_mul_of_pos_left (by omega) hinc
+        omega
+      · omega
+  · simp only [mapStride, getElem_ofFn, Float64Array.getElem_set]
+    rw [ite_eq_right (Ne.symm hq)]
+    by_cases hc : off ≤ p ∧ (p - off) % inc = 0
+    · have e := eq_stride_of_mod hc.1 hc.2
+      have hne : (p - off) / inc ≠ lo := fun h' => hq (by rw [e, h'])
+      by_cases hr : (p - off) / inc < hi
+      · by_cases hl : lo ≤ (p - off) / inc
+        · rw [ite_eq_left ⟨hc.1, hc.2, by omega, hr⟩, ite_eq_left ⟨hc.1, hc.2, hl, hr⟩]
+        · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
+      · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
+    · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
+
+/--
+Runs a loop that replaces each element `a[off + inc * j]`, for `j₀ ≤ j < hi`, with
+`g j a[off + inc * j]`, and then runs `k`. It is the loop of
+`for j in 0...hi do a[off + inc * j] := e`, from step `j₀`, for a term `e` that reads only
+`a[off + inc * j]`. The indices must not wrap around, and must be distinct: `inc > 0`, or the loop
+has at most one step.
+-/
+public theorem run_forInFrom_stride {n : Nat} {γ : Type} (hi j₀ : USize)
+    (hlo : (0 : USize).toNat ≤ j₀.toNat) (off inc : USize)
+    (hinc : 0 < inc.toNat ∨ hi.toNat ≤ 1)
+    (hix : ∀ j : USize, j.toNat < hi.toNat → (off + inc * j).toNat = off.toNat + inc.toNat * j.toNat)
+    (g : (j : USize) → j.toNat < hi.toNat → Float → Float) (G : Nat → Float → Float)
+    (hg : ∀ j hj v, g j hj v = G j.toNat v)
+    (p : ∀ j : USize, j.toNat < hi.toNat → (off + inc * j).toNat < n) (k : Unit → Tail n γ)
+    (a : Float64Array) (h : a.size = n) :
+    (Tail.forInFrom 0 hi j₀ hlo ()
+        (fun j _ hj next _ => Tail.readThen (off + inc * j) (p j hj) fun v =>
+          Tail.writeThen (off + inc * j) (p j hj) (g j hj v) (next ())) k).run a h =
+      (k ()).run (mapStride a off.toNat inc.toNat j₀.toNat hi.toNat G) (by simp [h]) := by
+  obtain ⟨d, hd⟩ : ∃ d, hi.toNat - j₀.toNat = d := ⟨_, rfl⟩
+  induction d generalizing j₀ a with
+  | zero =>
+    have hj : ¬ j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    rw [Tail.forInFrom_eq, dite_eq_right_of_eq_false (eq_false hj)]
+    congr 1
+    exact (mapStride_of_le a _ _ _ _ G (by omega)).symm
+  | succ d ih =>
+    have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    have hj' : j₀.toNat < hi.toNat := hj
+    rw [Tail.forInFrom_eq, dite_eq_left_of_eq_true (eq_true hj)]
+    simp only [Tail.run_readThen, Tail.run_writeThen]
+    have hsucc : (j₀ + 1).toNat = j₀.toNat + 1 := by
+      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt]
+      have : hi.toNat < USize.size := hi.toNat_lt_size
+      have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
+      omega
+    rw [ih (j₀ + 1) _ _ _ (by rw [hsucc]; omega)]
+    congr 1
+    have hq := p j₀ hj'
+    have e := hix j₀ hj'
+    have hq' : off.toNat + inc.toNat * j₀.toNat < a.size := by rw [h, ← e]; exact hq
+    rw [hsucc, ← mapStride_set a _ _ _ _ G hj' hinc hq']
+    congr 1
+    simp only [e]
+    congr 1
+    exact hg _ _ _
+
+/--
+Runs a loop that writes `g j` at each index `off + inc * j`, for `j₀ ≤ j < hi`, and then runs
+`k`: the loop of `for j in 0...hi do a[off + inc * j] := e`, for a term `e` that reads no element
+of `a`. The indices must not wrap around, and must be distinct.
+-/
+public theorem run_forInFrom_stride_write {n : Nat} {γ : Type} (hi j₀ : USize)
+    (hlo : (0 : USize).toNat ≤ j₀.toNat) (off inc : USize)
+    (hinc : 0 < inc.toNat ∨ hi.toNat ≤ 1)
+    (hix : ∀ j : USize, j.toNat < hi.toNat → (off + inc * j).toNat = off.toNat + inc.toNat * j.toNat)
+    (g : (j : USize) → j.toNat < hi.toNat → Float) (G : Nat → Float)
+    (hg : ∀ j hj, g j hj = G j.toNat)
+    (p : ∀ j : USize, j.toNat < hi.toNat → (off + inc * j).toNat < n) (k : Unit → Tail n γ)
+    (a : Float64Array) (h : a.size = n) :
+    (Tail.forInFrom 0 hi j₀ hlo ()
+        (fun j _ hj next _ => Tail.writeThen (off + inc * j) (p j hj) (g j hj) (next ())) k).run a h =
+      (k ()).run (mapStride a off.toNat inc.toNat j₀.toNat hi.toNat fun i _ => G i)
+        (by simp [h]) := by
+  obtain ⟨d, hd⟩ : ∃ d, hi.toNat - j₀.toNat = d := ⟨_, rfl⟩
+  induction d generalizing j₀ a with
+  | zero =>
+    have hj : ¬ j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    rw [Tail.forInFrom_eq, dite_eq_right_of_eq_false (eq_false hj)]
+    congr 1
+    exact (mapStride_of_le a _ _ _ _ _ (by omega)).symm
+  | succ d ih =>
+    have hj : j₀ < hi := by rw [USize.lt_iff_toNat_lt]; omega
+    have hj' : j₀.toNat < hi.toNat := hj
+    rw [Tail.forInFrom_eq, dite_eq_left_of_eq_true (eq_true hj)]
+    simp only [Tail.run_writeThen]
+    have hsucc : (j₀ + 1).toNat = j₀.toNat + 1 := by
+      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt]
+      have : hi.toNat < USize.size := hi.toNat_lt_size
+      have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
+      omega
+    rw [ih (j₀ + 1) _ _ _ (by rw [hsucc]; omega)]
+    congr 1
+    have hq := p j₀ hj'
+    have e := hix j₀ hj'
+    have hq' : off.toNat + inc.toNat * j₀.toNat < a.size := by rw [h, ← e]; exact hq
+    rw [hsucc, ← mapStride_set a _ _ _ _ (fun i _ => G i) hj' hinc hq']
+    congr 1
+    simp only [e]
+    congr 1
+    exact hg _ _
+
+/--
+A copy of `n` elements from `src` to `dest`, both in bounds unless `n = 0`, is a stride of `1` on
+`dest`.
+-/
+public theorem copySlice_eq_mapStride (src dest : Float64Array) (so d n : Nat)
+    (hs : n = 0 ∨ so + n ≤ src.size) (hd : n = 0 ∨ d + n ≤ dest.size) :
+    src.copySlice so dest d n = mapStride dest d 1 0 n fun i _ => src[so + i]! := by
+  apply ext_getElem (by simp [size_copySlice]; omega)
+  intro p h₁ h₂
+  rw [getElem_copySlice]
+  simp only [mapStride, getElem_ofFn, Nat.mod_one, Nat.div_one]
+  by_cases hp : d ≤ p ∧ p - d < n
+  · rw [ite_eq_left ⟨hp.1, trivial, Nat.zero_le _, hp.2⟩,
+      dite_eq_right (by omega), dite_eq_left (by omega), getElem!_pos src _ (by omega)]
+    congr 1
+    omega
+  · rw [ite_eq_right (by omega)]
+    split
+    · rfl
+    · rw [dite_eq_right (by omega)]
+
 end BLAS.Float64
