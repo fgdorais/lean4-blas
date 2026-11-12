@@ -275,6 +275,43 @@ def gemmRows (rounds m : Nat) : IO (List Row × Nat) := do
   return ([⟨s!"gemm {m}", t, some t'⟩, ⟨s!"gemmBlocked {m}", tb, some t'⟩,
     ⟨s!"gemmBlocked {m}, ld = {m} + 8 / ld = {m}", tl, some tb⟩], 2 * m * m * m)
 
+/-- The sizes of the Level 2 benchmarks. -/
+def level2Sizes : List Nat := [256, 1024, 2048]
+
+/--
+The Level 2 benchmarks for `m × m` matrices, ten calls per round: `gemv`, `gemvT` and `ger`, on
+packed operands, and `gemv` with `x` and `y` at stride 2. Each makes `2 * m * m` floating-point
+operations per call.
+-/
+def level2Rows (rounds m : Nat) : IO (List Row × Nat) := do
+  let A := mat m 1
+  let x : BLAS.Float64.Vec m := .ofArray (vec m) (by simp [vec])
+  let x2 : BLAS.Float64.Vec m := (BLAS.Float64.Vec.ofStride? (vec (2 * m)) 0 2).getD x
+  let α (q : Nat) := 1.5 + (q - m).toFloat
+  let tv ← time rounds m fun q => Id.run do
+    let mut y := x
+    for _ in [0:reps] do
+      y := BLAS.Float64.Mat.gemv (α q) A x 0.5 y
+    return y.data[0]!
+  let tt ← time rounds m fun q => Id.run do
+    let mut y := x
+    for _ in [0:reps] do
+      y := BLAS.Float64.Mat.gemvT (α q) A x 0.5 y
+    return y.data[0]!
+  let tg ← time rounds m fun q => Id.run do
+    let mut B := A
+    for _ in [0:reps] do
+      B := BLAS.Float64.Mat.ger (α q) x x B
+    return B.data[0]!
+  let tv2 ← time rounds m fun q => Id.run do
+    let mut y := x2
+    for _ in [0:reps] do
+      y := BLAS.Float64.Mat.gemv (α q) A x2 0.5 y
+    return y.data[0]!
+  return ([⟨s!"gemv {m} ×{reps}", tv, none⟩, ⟨s!"gemvT {m} ×{reps}", tt, none⟩,
+    ⟨s!"ger {m} ×{reps}", tg, none⟩, ⟨s!"gemv {m} ×{reps}, stride 2 / stride 1", tv2, some tv⟩],
+    2 * m * m * reps)
+
 /-- A time in milliseconds with three decimals. -/
 def fmt (t : Float) : String :=
   let s := toString ((t * 1000).round / 1000)
@@ -293,7 +330,8 @@ public def main (args : List String) : IO Unit := do
   let rounds := nums[1]?.getD 10
   let rows ← rows rounds n
   let gemm ← gemmSizes.mapM (gemmRows rounds)
-  let rows := rows ++ (gemm.map (·.1)).flatten
+  let level2 ← level2Sizes.mapM (level2Rows rounds)
+  let rows := rows ++ (level2.map (·.1)).flatten ++ (gemm.map (·.1)).flatten
   if tsv then
     for r in rows do
       IO.println s!"{r.name}\t{fmt r.time}"
@@ -306,6 +344,15 @@ public def main (args : List String) : IO Unit := do
         | some c => (fmt c, fmt (r.time / c))
         | none => ("—", "—")
       IO.println s!"| {r.name} | {fmt r.time} | {c} | {ratio} |"
+    IO.println "\nLevel 2 on square matrices, in GFLOP/s.\n"
+    IO.println "| Size | gemv | gemvT | ger | gemv, stride 2 |"
+    IO.println "|--:|--:|--:|--:|--:|"
+    for (rs, flops) in level2, m in level2Sizes do
+      let g (t : Float) := fmt (flops.toFloat / (t * 1e6))
+      match rs with
+      | [v, t, r, v2] =>
+        IO.println s!"| {m} | {g v.time} | {g t.time} | {g r.time} | {g v2.time} |"
+      | _ => pure ()
     IO.println "\n`gemm` of square matrices, in GFLOP/s.\n"
     IO.println "| Size | gemm | gemmBlocked | gemmBlocked, ld = m + 8 | Reference |"
     IO.println "|--:|--:|--:|--:|--:|"

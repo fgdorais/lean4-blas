@@ -6,6 +6,7 @@ module
 
 public import BLAS.Float64.PMat
 public import BLAS.Float64.Vec
+public import BLAS.Float64.Loop
 
 /-!
 # Matrices
@@ -53,12 +54,63 @@ public theorem index_lt (A : Mat m n) {i j : Nat} (hi : i < m) (hj : j < n) :
     A.off + A.ld * j + i < A.data.size := by
   have := A.col_le (by omega) hj; omega
 
+/--
+The `USize` index `off + ld * j + i` of an element, in an array of `USize` size, doesn't wrap
+around.
+-/
+public theorem toNat_index (A : Mat m n) (hs : A.data.size < USize.size) {i j : USize}
+    (hi : i.toNat < m) (hj : j.toNat < n) :
+    (A.off.toUSize + A.ld.toUSize * j + i).toNat = A.off + A.ld * j.toNat + i.toNat := by
+  have h₁ := A.index_lt hi hj
+  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
+  have ho : A.off.toUSize.toNat = A.off := by
+    simp [Nat.mod_eq_of_lt (show A.off < USize.size by omega)]
+  have hm : (A.ld.toUSize * j).toNat = A.ld * j.toNat := by
+    rcases Nat.eq_zero_or_pos j.toNat with h₀ | h₀
+    · have : j = 0 := USize.toNat_inj.mp (by simpa using h₀)
+      subst this
+      simp
+    · have hl : A.ld ≤ A.ld * j.toNat := Nat.le_mul_of_pos_right _ h₀
+      have hc : A.ld.toUSize.toNat = A.ld := by
+        simp [Nat.mod_eq_of_lt (show A.ld < USize.size by omega)]
+      rw [USize.toNat_mul, hc, Nat.mod_eq_of_lt (by omega)]
+  rw [USize.toNat_add, USize.toNat_add, ho, hm, Nat.mod_eq_of_lt (a := A.off + A.ld * j.toNat)
+    (by omega), Nat.mod_eq_of_lt (by omega)]
+
+/-- The `USize` index of an element, as the step `i` of column `j` with the stride `1`. -/
+public theorem toNat_col_index (A : Mat m n) (hs : A.data.size < USize.size) {i j : USize}
+    (hi : i.toNat < m) (hj : j.toNat < n) :
+    (A.off.toUSize + A.ld.toUSize * j + 1 * i).toNat = A.off + A.ld * j.toNat + 1 * i.toNat := by
+  rw [USize.one_mul, Nat.one_mul, A.toNat_index hs hi hj]
+
+/-- The `USize` index of an element, as the step `i` of column `j`, is in the array. -/
+public theorem toNat_col_index_lt (A : Mat m n) (hs : A.data.size < USize.size) {i j : USize}
+    (hi : i.toNat < m) (hj : j.toNat < n) :
+    (A.off.toUSize + A.ld.toUSize * j + 1 * i).toNat < A.data.size := by
+  rw [A.toNat_col_index hs hi hj, Nat.one_mul]; exact A.index_lt hi hj
+
+/--
+The element at the `USize` indices `i` and `j`, in a matrix whose array has a `USize` size, given
+its offset `o` and leading dimension `l` as `USize`s, computed once before a loop. It compiles to
+an inline load.
+-/
+@[inline] public def uget (A : Mat m n) (o l : USize) (ho : A.off.toUSize = o)
+    (hl : A.ld.toUSize = l) (hs : A.data.size < USize.size) (i j : USize) (hi : i.toNat < m)
+    (hj : j.toNat < n) : Float :=
+  A.data.uget (o + l * j + i) (by rw [← ho, ← hl, A.toNat_index hs hi hj]; exact A.index_lt hi hj)
+
 /-- `A[(i, j)]` is the element in row `i` and column `j`. -/
 public instance : GetElem (Mat m n) (Nat × Nat) Float fun _ p => p.1 < m ∧ p.2 < n where
   getElem A p h := A.data[A.off + A.ld * p.2 + p.1]'(A.index_lt h.1 h.2)
 
 public theorem getElem_def (A : Mat m n) (i j : Nat) (h : i < m ∧ j < n) :
     A[(i, j)] = A.data[A.off + A.ld * j + i]'(A.index_lt h.1 h.2) := rfl
+
+@[simp] public theorem uget_eq_getElem (A : Mat m n) (o l : USize) (ho : A.off.toUSize = o)
+    (hl : A.ld.toUSize = l) (hs : A.data.size < USize.size) (i j : USize) (hi : i.toNat < m)
+    (hj : j.toNat < n) : A.uget o l ho hl hs i j hi hj = A[(i.toNat, j.toNat)] := by
+  subst ho hl
+  simp only [uget, Float64Array.uget_eq_getElem, getElem_def, A.toNat_index hs hi hj]
 
 /-- The matrix of a packed matrix, with no copy. -/
 @[expose] public def ofPMat (A : PMat m n) : Mat m n where
@@ -218,6 +270,52 @@ public theorem getElem_of_data_eq_mapMat {A B : Mat m n} (g : Nat → Nat → Fl
       (mapMat A.data A.off A.ld m 0 n g)[A.off + A.ld * j + i]'(by simpa using hq) := by
     simp only [hd, ho, hl]
   rw [e, getElem_mapMat_index _ _ _ _ _ _ _ h.1 A.le_ld ⟨Nat.zero_le _, h.2⟩ hq]
+
+/-- Mapping column `n` of a matrix, as a stride of `1`, adds it to the columns before it. -/
+theorem mapStride_mapMat (a : Float64Array) (off ld : Nat) (hml : m ≤ ld) (j : Nat)
+    (g : Nat → Nat → Float → Float) :
+    mapStride (mapMat a off ld m 0 j g) (off + ld * j) 1 0 m (fun i v => g i j v) =
+      mapMat a off ld m 0 (j + 1) g := by
+  apply ext_getElem (by simp)
+  intro p h₁ h₂
+  simp only [size_mapMat] at h₂
+  by_cases hw : ∃ i, i < m ∧ p = off + ld * j + i
+  · obtain ⟨i, hi, rfl⟩ := hw
+    have e : ∀ (b : Float64Array) (h : off + ld * j + i < b.size),
+        b[off + ld * j + i] = b[off + ld * j + 1 * i]'(by rw [Nat.one_mul]; exact h) := by
+      intro b h; simp only [Nat.one_mul]
+    rw [e _ h₁, getElem_mapStride_stride _ _ _ _ _ _ ⟨Nat.zero_le _, hi⟩ (Or.inl Nat.one_pos)
+      (by simpa using h₂), getElem_mapMat_index _ _ _ _ _ _ _ hi hml ⟨Nat.zero_le _, by omega⟩ h₂]
+    simp only [Nat.one_mul]
+    rw [getElem_mapMat_of_ne _ _ _ _ _ _ _ ?_ (by simpa using h₂)]
+    intro i' j' hi' _ hj' he
+    have h₁ := mat_index (off := off) (j := j) (show i < ld by omega)
+    have h₂ := mat_index (off := off) (j := j') (show i' < ld by omega)
+    rw [he] at h₁
+    omega
+  · have hne : ∀ i, 0 ≤ i → i < m → p ≠ off + ld * j + 1 * i :=
+      fun i _ hi e => hw ⟨i, hi, by omega⟩
+    rw [getElem_mapStride_of_ne _ _ _ _ _ _ hne (by simpa using h₂)]
+    simp only [mapMat, Float64Array.getElem_ofFn]
+    by_cases hc : off ≤ p ∧ (p - off) % ld < m
+    · have e := eq_mat_index (ld := ld) hc.1
+      have hj' : (p - off) / ld ≠ j := fun h' => hw ⟨_, hc.2, by rw [← h']; exact e⟩
+      by_cases hr : (p - off) / ld < j + 1
+      · rw [ite_eq_left ⟨hc.1, hc.2, Nat.zero_le _, by omega⟩,
+          ite_eq_left ⟨hc.1, hc.2, Nat.zero_le _, hr⟩]
+      · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
+    · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
+
+/-- Steps that each map column `j` of a matrix, as a stride of `1`, map the whole matrix. -/
+public theorem iterRange_cols (a : Float64Array) (off ld : Nat) (hml : m ≤ ld) (n : Nat)
+    (G : Nat → Nat → Float → Float) :
+    iterRange (fun j c => mapStride c (off + ld * j) 1 0 m (G j)) 0 n a =
+      mapMat a off ld m 0 n fun i j v => G j i v := by
+  induction n with
+  | zero => rw [iterRange_of_le _ (Nat.le_refl _), mapMat_of_le _ _ _ _ _ _ _ (Nat.le_refl _)]
+  | succ n ih =>
+    rw [iterRange_succ _ (Nat.zero_le _), ih]
+    exact mapStride_mapMat a off ld hml n _
 
 /-! ## Packing -/
 

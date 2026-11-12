@@ -372,7 +372,7 @@ public theorem run_forInFrom_iter {n : Nat} {γ : Type} (lo hi j₀ : USize)
 The array `a` with `g i a[off + inc * i]` at the indices `off + inc * i`, for `lo ≤ i < hi`. For
 `inc = 0`, only the index `off`, for `i = 0`, is changed.
 -/
-public def mapStride (a : Float64Array) (off inc lo hi : Nat) (g : Nat → Float → Float) :
+@[expose] public def mapStride (a : Float64Array) (off inc lo hi : Nat) (g : Nat → Float → Float) :
     Float64Array :=
   .ofFn (n := a.size) fun p =>
     if off ≤ p.val ∧ (p.val - off) % inc = 0 ∧ lo ≤ (p.val - off) / inc ∧ (p.val - off) / inc < hi
@@ -563,5 +563,45 @@ public theorem copySlice_eq_mapStride (src dest : Float64Array) (so d n : Nat)
     split
     · rfl
     · rw [dite_eq_right (by omega)]
+
+/-- Two strides with the same indices compose: the element `i` is mapped by `g` and then `g'`. -/
+public theorem mapStride_mapStride (a : Float64Array) (off inc lo hi : Nat)
+    (g g' : Nat → Float → Float) :
+    mapStride (mapStride a off inc lo hi g) off inc lo hi g' =
+      mapStride a off inc lo hi fun i v => g' i (g i v) := by
+  apply ext_getElem (by simp)
+  intro p _ _
+  simp only [mapStride, getElem_ofFn]
+  split <;> rfl
+
+/-- `mapStride` depends only on the values of its function at the steps of the stride. -/
+public theorem mapStride_congr (a : Float64Array) (off inc lo hi : Nat) {g g' : Nat → Float → Float}
+    (h : ∀ i v, lo ≤ i → i < hi → g i v = g' i v) :
+    mapStride a off inc lo hi g = mapStride a off inc lo hi g' := by
+  apply ext_getElem (by simp)
+  intro p _ _
+  simp only [mapStride, getElem_ofFn]
+  split
+  · rename_i hc; exact h _ _ hc.2.2.1 hc.2.2.2
+  · rfl
+
+/--
+Steps that each map the same stride, by `G j` at step `j`, map it by the left fold of the `G j`
+over `j < n`.
+-/
+public theorem iterRange_mapStride (a : Float64Array) (off inc lo hi n : Nat)
+    (G : Nat → Nat → Float → Float) :
+    iterRange (fun j c => mapStride c off inc lo hi (G j)) 0 n a =
+      mapStride a off inc lo hi fun i v => Nat.fold n (fun j _ v => G j i v) v := by
+  induction n with
+  | zero =>
+    rw [iterRange_of_le _ (Nat.le_refl _)]
+    apply ext_getElem (by simp)
+    intro p _ _
+    simp only [mapStride, getElem_ofFn, Nat.fold_zero]
+    split <;> rfl
+  | succ n ih =>
+    rw [iterRange_succ _ (Nat.zero_le _), ih, mapStride_mapStride]
+    simp only [Nat.fold_succ]
 
 end BLAS.Float64
