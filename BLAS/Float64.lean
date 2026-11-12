@@ -7,3 +7,6 @@ module
 public import BLAS.Float64.Vec
 public import BLAS.Float64.Loop
 public import BLAS.Float64.Level1
+public import BLAS.Float64.Mat
+public import BLAS.Float64.Level3
+public import BLAS.Float64.GemmBlocked
