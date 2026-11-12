@@ -5,8 +5,9 @@ testDriver = "BLASTest"
 # Linters that are off by default.
 leanOptions = { linter.missingDocs = true, linter.extra = true }
 
-# Pinned to an exact version: the kernels use the experimental `inplace` notation, which is outside
-# scalar-arrays' stability promise.
+# Tracks scalar-arrays' `main` for its strides and whole-loop lemmas (#91), until they are in a
+# release. The manifest pins the exact commit, since the kernels use the experimental `inplace`
+# notation, which is outside scalar-arrays' stability promise.
 [[require]]
 name = "lean4-scalar-arrays"
 git = "https://github.com/fgdorais/lean4-scalar-arrays"
