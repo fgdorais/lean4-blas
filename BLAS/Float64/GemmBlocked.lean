@@ -9,7 +9,7 @@ public import BLAS.Float64.Level3
 /-!
 # Blocked `gemm`
 
-`Mat.gemmBlocked` computes `gemm` by blocked loops, about twice as fast, with the same result: each
+`PMat.gemmBlocked` computes `gemm` by blocked loops, about twice as fast, with the same result: each
 element of `C` gets the same terms in the same order.
 
 The work is split into small functions: plain recursive loops over the blocks, the columns and the
@@ -196,7 +196,7 @@ theorem getElem!_sweep1 (a c : Float64Array) (cj al len hc ha) (t : Float)
 
 public instance : Decidable (gemmFits m n k) := by unfold gemmFits; infer_instance
 
-namespace Mat
+namespace PMat
 
 variable {m n k : Nat}
 
@@ -204,7 +204,7 @@ variable {m n k : Nat}
 Adds the terms `l ≤ l' < l₁` to the rows `i₀ ≤ i < i₀ + len` of the columns `j` and `j + 1` of
 `C`, in the array `c`: four terms at a time by `sweep4`, then one at a time by `sweep2`.
 -/
-public def gemmPairTerms (α : Float) (A : Mat m k) (B : Mat k n) (hs : gemmFits m n k)
+public def gemmPairTerms (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFits m n k)
     (j : USize) (hj : j.toNat + 1 < n) (i₀ len : USize) (hw : i₀.toNat + len.toNat ≤ m)
     (l l₁ : USize) (hl : l.toNat ≤ l₁.toNat) (hl₁ : l₁.toNat ≤ k)
     (c : Float64Array) (hc : c.size = m * n) : {c' : Float64Array // c'.size = m * n} :=
@@ -287,7 +287,7 @@ decreasing_by
   · omega
 
 /-- `gemmPairTerms` for the last column `j`, when `n` is odd, one term at a time by `sweep1`. -/
-public def gemmColTerms (α : Float) (A : Mat m k) (B : Mat k n) (hs : gemmFits m n k)
+public def gemmColTerms (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFits m n k)
     (j : USize) (hj : j.toNat < n) (i₀ len : USize) (hw : i₀.toNat + len.toNat ≤ m)
     (l l₁ : USize) (_hl : l.toNat ≤ l₁.toNat) (hl₁ : l₁.toNat ≤ k)
     (c : Float64Array) (hc : c.size = m * n) : {c' : Float64Array // c'.size = m * n} :=
@@ -320,7 +320,7 @@ decreasing_by omega
 Adds the terms `l₀ ≤ l < l₁` to the rows `i₀ ≤ i < i₀ + len` of the columns `j ≤ j' < n` of `C`:
 two columns at a time by `gemmPairTerms`, then the last one by `gemmColTerms` if there is one.
 -/
-public def gemmCols (α : Float) (A : Mat m k) (B : Mat k n) (hs : gemmFits m n k)
+public def gemmCols (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFits m n k)
     (i₀ len : USize) (hw : i₀.toNat + len.toNat ≤ m)
     (l₀ l₁ : USize) (hl : l₀.toNat ≤ l₁.toNat) (hl₁ : l₁.toNat ≤ k)
     (j : USize) (hj : j.toNat ≤ n) (c : Float64Array) (hc : c.size = m * n) :
@@ -352,7 +352,7 @@ decreasing_by omega
 Adds the terms `l₀ ≤ l < l₁` to the rows `i₀ ≤ i < m` of `C`, by `gemmCols` on blocks of 256
 rows.
 -/
-public def gemmRowBlocks (α : Float) (A : Mat m k) (B : Mat k n) (hs : gemmFits m n k)
+public def gemmRowBlocks (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFits m n k)
     (l₀ l₁ : USize) (hl : l₀.toNat ≤ l₁.toNat) (hl₁ : l₁.toNat ≤ k)
     (i₀ : USize) (_hi₀ : i₀.toNat < m + 256) (c : Float64Array) (hc : c.size = m * n) :
     {c' : Float64Array // c'.size = m * n} :=
@@ -387,7 +387,7 @@ termination_by m + 256 - i₀.toNat
 decreasing_by omega
 
 /-- Adds the terms `l₀ ≤ l < k` to `C`, by `gemmRowBlocks` on blocks of 128 terms. -/
-public def gemmTermBlocks (α : Float) (A : Mat m k) (B : Mat k n) (hs : gemmFits m n k)
+public def gemmTermBlocks (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFits m n k)
     (l₀ : USize) (_hl₀ : l₀.toNat ≤ k) (c : Float64Array) (hc : c.size = m * n) :
     {c' : Float64Array // c'.size = m * n} :=
   have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
@@ -427,8 +427,8 @@ when `n` is odd, and the terms that don't make a group of four go one at a time.
 `C` gets the same terms in the same order as in `gemm`, so the result is the same, which
 `gemmBlocked_eq` proves.
 -/
-public def gemmBlocked (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n) :
-    Mat m n :=
+public def gemmBlocked (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) :
+    PMat m n :=
   if hs : gemmFits m n k then
     have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
         m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
@@ -453,30 +453,30 @@ public def gemmBlocked (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C 
       ⟨c''.1, c''.2⟩
   else gemmModel α A B β C
 
-end Mat
+end PMat
 
 end BLAS.Float64
 
-namespace BLAS.Float64.Mat
+namespace BLAS.Float64.PMat
 
 variable {m n k : Nat}
 
 /-- The element `(i, j)` of `gemm α A B β C` after its first `L` terms. -/
-def gemmPartial (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n)
+def gemmPartial (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (i j L : Nat) : Float :=
   Nat.fold L (fun l _ s => s + α * B.data[l + k * j]! * A.data[i + m * l]!) (β * C.data[i + m * j]!)
 
-theorem gemmPartial_succ (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n)
+theorem gemmPartial_succ (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (i j L : Nat) : gemmPartial α A B β C i j (L + 1) =
       gemmPartial α A B β C i j L + α * B.data[L + k * j]! * A.data[i + m * L]! := by
   simp [gemmPartial, Nat.fold_succ]
 
 /-- The array `c` holds each element `(i, j)` of `C` after its first `cnt i j` terms. -/
-def GemmInv (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n)
+def GemmInv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (cnt : Nat → Nat → Nat) (c : Float64Array) : Prop :=
   ∀ i j, i < m → j < n → c[i + m * j]! = gemmPartial α A B β C i j (cnt i j)
 
-theorem GemmInv.congr {α : Float} {A : Mat m k} {B : Mat k n} {β : Float} {C : Mat m n}
+theorem GemmInv.congr {α : Float} {A : PMat m k} {B : PMat k n} {β : Float} {C : PMat m n}
     {cnt cnt' : Nat → Nat → Nat} {c : Float64Array} (h : GemmInv α A B β C cnt c)
     (e : ∀ i j, i < m → j < n → cnt i j = cnt' i j) : GemmInv α A B β C cnt' c := by
   intro i j hi hj; rw [h i j hi hj, e i j hi hj]
@@ -495,7 +495,7 @@ theorem window_iff {m j j' r i₀ len : Nat} (hr : r < m) (hw : i₀ + len ≤ m
       rw [Nat.mul_succ] at this; omega
   · rintro ⟨rfl, h₁, h₂⟩; omega
 
-theorem GemmInv.sweep4 {α : Float} {A : Mat m k} {B : Mat k n} {β : Float} {C : Mat m n}
+theorem GemmInv.sweep4 {α : Float} {A : PMat m k} {B : PMat k n} {β : Float} {C : PMat m n}
     {cnt : Nat → Nat → Nat} {c : Float64Array} (hinv : GemmInv α A B β C cnt c)
     (hc : c.size = m * n) (hsmall : m * n < USize.size) (hasmall : m * k < USize.size)
     {j i₀ len L : Nat} (hj : j + 1 < n) (hw : i₀ + len ≤ m) (_hL : L + 4 ≤ k)
@@ -548,7 +548,7 @@ theorem GemmInv.sweep4 {α : Float} {A : Mat m k} {B : Mat k n} {β : Float} {C 
       · exact h₀ ⟨h, hr₁, hr₂⟩
       · exact h₁ ⟨h, hr₁, hr₂⟩
 
-theorem GemmInv.sweep2 {α : Float} {A : Mat m k} {B : Mat k n} {β : Float} {C : Mat m n}
+theorem GemmInv.sweep2 {α : Float} {A : PMat m k} {B : PMat k n} {β : Float} {C : PMat m n}
     {cnt : Nat → Nat → Nat} {c : Float64Array} (hinv : GemmInv α A B β C cnt c)
     (hc : c.size = m * n) (hsmall : m * n < USize.size) (hasmall : m * k < USize.size)
     {j i₀ len L : Nat} (hj : j + 1 < n) (hw : i₀ + len ≤ m) (_hL : L < k)
@@ -586,7 +586,7 @@ theorem GemmInv.sweep2 {α : Float} {A : Mat m k} {B : Mat k n} {β : Float} {C 
       · exact h₀ ⟨h, hr₁, hr₂⟩
       · exact h₁ ⟨h, hr₁, hr₂⟩
 
-theorem GemmInv.sweep1 {α : Float} {A : Mat m k} {B : Mat k n} {β : Float} {C : Mat m n}
+theorem GemmInv.sweep1 {α : Float} {A : PMat m k} {B : PMat k n} {β : Float} {C : PMat m n}
     {cnt : Nat → Nat → Nat} {c : Float64Array} (hinv : GemmInv α A B β C cnt c)
     (hc : c.size = m * n) (hsmall : m * n < USize.size) (hasmall : m * k < USize.size)
     {j i₀ len L : Nat} (hj : j < n) (hw : i₀ + len ≤ m) (_hL : L < k)
@@ -611,7 +611,7 @@ theorem GemmInv.sweep1 {α : Float} {A : Mat m k} {B : Mat k n} {β : Float} {C 
     intro ⟨hr₁, hr₂, h⟩
     exact h₀ ⟨h, hr₁, hr₂⟩
 
-theorem gemmPairTerms_inv (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n)
+theorem gemmPairTerms_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (hs : gemmFits m n k) (j : USize) (hj : j.toNat + 1 < n) (i₀ len : USize)
     (hw : i₀.toNat + len.toNat ≤ m) (l l₁ : USize) (hl : l.toNat ≤ l₁.toNat) (hl₁ : l₁.toNat ≤ k)
     (c : Float64Array) (hc : c.size = m * n) (cnt : Nat → Nat → Nat)
@@ -724,7 +724,7 @@ theorem gemmPairTerms_inv (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) 
         · exact (hcnt r hW.1 hW.2.1).2
       · rw [ite_eq_right hW]
 
-theorem gemmColTerms_inv (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n)
+theorem gemmColTerms_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (hs : gemmFits m n k) (j : USize) (hj : j.toNat < n) (i₀ len : USize)
     (hw : i₀.toNat + len.toNat ≤ m) (l l₁ : USize) (hl : l.toNat ≤ l₁.toNat) (hl₁ : l₁.toNat ≤ k)
     (c : Float64Array) (hc : c.size = m * n) (cnt : Nat → Nat → Nat)
@@ -787,7 +787,7 @@ theorem gemmColTerms_inv (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (
       exact hcnt r hW.1 hW.2.1
     · rw [ite_eq_right hW]
 
-theorem gemmCols_inv (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n)
+theorem gemmCols_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (hs : gemmFits m n k) (i₀ len : USize) (hw : i₀.toNat + len.toNat ≤ m)
     (l₀ l₁ : USize) (hl : l₀.toNat ≤ l₁.toNat) (hl₁ : l₁.toNat ≤ k)
     (j : USize) (hj : j.toNat ≤ n) (c : Float64Array) (hc : c.size = m * n)
@@ -856,7 +856,7 @@ theorem gemmCols_inv (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : 
       have : ¬ j.toNat ≤ j' := by omega
       simp [this]
 
-theorem gemmRowBlocks_inv (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n)
+theorem gemmRowBlocks_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (hs : gemmFits m n k) (l₀ l₁ : USize) (hl : l₀.toNat ≤ l₁.toNat) (hl₁ : l₁.toNat ≤ k)
     (i₀ : USize) (hi₀ : i₀.toNat < m + 256) (c : Float64Array) (hc : c.size = m * n)
     (cnt : Nat → Nat → Nat) (hinv : GemmInv α A B β C cnt c)
@@ -914,7 +914,7 @@ theorem gemmRowBlocks_inv (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) 
     have : ¬ i₀.toNat ≤ r := by omega
     simp [this]
 
-theorem gemmTermBlocks_inv (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n)
+theorem gemmTermBlocks_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (hs : gemmFits m n k) (l₀ : USize) (hl₀ : l₀.toNat ≤ k) (c : Float64Array)
     (hc : c.size = m * n) (hinv : GemmInv α A B β C (fun _ _ => l₀.toNat) c) :
     GemmInv α A B β C (fun _ _ => k) (gemmTermBlocks α A B hs l₀ hl₀ c hc).1 := by
@@ -967,8 +967,8 @@ theorem getElem!_betaPass (m β j) (c : Float64Array) (q : Nat) (hq : q < c.size
   have := getElem!_iterRange_set! (m * j) (fun _ x => β * x) 0 m c q hq
   simpa [betaPass] using this
 
-theorem GemmInv.betaPass (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n) :
-    GemmInv α A B β C (fun _ _ => 0) (iterRange (Mat.betaPass m β) 0 n C.data) := by
+theorem GemmInv.betaPass (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) :
+    GemmInv α A B β C (fun _ _ => 0) (iterRange (PMat.betaPass m β) 0 n C.data) := by
   intro i j hi hj
   have hq := index_lt hi hj
   have hC := C.size_data
@@ -992,7 +992,7 @@ theorem GemmInv.betaPass (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (
     · rw [getElem!_neg c _ hc, getElem!_neg _ _ (by rw [hsz]; exact hc)]
 
 /-- `gemmBlocked` computes `gemm`, with the same result to the bit. -/
-public theorem gemmBlocked_eq (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n) :
+public theorem gemmBlocked_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) :
     gemmBlocked α A B β C = gemmModel α A B β C := by
   unfold gemmBlocked
   split
@@ -1033,13 +1033,13 @@ public theorem gemmBlocked_eq (α : Float) (A : Mat m k) (B : Mat k n) (β : Flo
           rw [getElem!_pos a' _ (by rw [h']; rw [Nat.add_comm]; omega)]
   · rfl
 
-@[simp] public theorem getElem_gemmBlocked (α : Float) (A : Mat m k) (B : Mat k n) (β : Float)
-    (C : Mat m n) (i j : Nat) (h : i < m ∧ j < n) :
+@[simp] public theorem getElem_gemmBlocked (α : Float) (A : PMat m k) (B : PMat k n) (β : Float)
+    (C : PMat m n) (i j : Nat) (h : i < m ∧ j < n) :
     (gemmBlocked α A B β C)[(i, j)] = gemmEntry α A B β C i j h.1 h.2 := by
   rw [gemmBlocked_eq, ← gemm_eq, getElem_gemm]
 
-theorem gemmBlocked_eq_gemm (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n) :
+public theorem gemmBlocked_eq_gemm (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) :
     gemmBlocked α A B β C = gemm α A B β C := by
   rw [gemmBlocked_eq, gemm_eq]
 
-end BLAS.Float64.Mat
+end BLAS.Float64.PMat

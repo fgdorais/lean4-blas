@@ -4,7 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 module
 
-public import BLAS.Float64.Mat
+public import BLAS.Float64.PMat
 public import BLAS.Float64.Loop
 public import ScalarArray.InPlaceSyntax
 
@@ -43,12 +43,12 @@ private theorem col_window {m j' i j : Nat} (hi : i < m) :
 /-- The index `x * y + i` of an element of a column, as a `Nat`. -/
 private theorem toNat_mul_add {x y i : USize} {X Y : Nat} (hx : x.toNat = X) (hi : i.toNat < X)
     (hy : y.toNat < Y) (hs : X * Y < USize.size) : (x * y + i).toNat = X * y.toNat + i.toNat := by
-  have := Mat.index_lt hi hy
+  have := PMat.index_lt hi hy
   have hxy : (x * y).toNat = X * y.toNat := by
     rw [USize.toNat_mul_of_lt (by rw [hx]; omega), hx]
   rw [USize.toNat_add_of_lt (by rw [hxy]; omega), hxy]
 
-namespace Mat
+namespace PMat
 
 variable {m n k : Nat}
 
@@ -56,13 +56,13 @@ variable {m n k : Nat}
 The value of `gemm α A B β C` at `(i, j)`: `β * C[i, j]`, plus the terms `α * B[l, j] * A[i, l]`
 for `l = 0, …, k - 1`, added from the left, in the order of the reference BLAS.
 -/
-@[expose] public def gemmEntry (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n)
+@[expose] public def gemmEntry (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (i j : Nat) (hi : i < m) (hj : j < n) : Float :=
   Nat.fold k (fun l hl s => s + α * B[(l, j)] * A[(i, l)]) (β * C[(i, j)])
 
 /-- The model of `gemm`, with `gemmEntry` at each element. -/
-public def gemmModel (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n) :
-    Mat m n :=
+public def gemmModel (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) :
+    PMat m n :=
   ofFn fun i j => gemmEntry α A B β C i j i.isLt j.isLt
 
 /--
@@ -71,7 +71,7 @@ public def gemmModel (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : 
 `l = 0, …, k - 1`. It updates `C` in place when `C` is not shared. Unlike the reference BLAS, it
 doesn't special-case `β = 0`, so a `NaN` in `C` stays a `NaN`.
 -/
-public def gemm (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n) : Mat m n :=
+public def gemm (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) : PMat m n :=
   if hs : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m < USize.size ∧ n < USize.size ∧ k < USize.size then
     let mu := m.toUSize
@@ -153,7 +153,7 @@ private theorem getElem!_gemmCol (α a b β) {i j : Nat} (hi : i < m) (c : Float
       _ _ _ _ (by omega), ite_eq_left hw, hsub]
   · simp [size_iterRange]
 
-public theorem gemm_eq (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n) :
+public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) :
     gemm α A B β C = gemmModel α A B β C := by
   unfold gemm
   split
@@ -231,11 +231,11 @@ public theorem gemm_eq (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C 
           rw [getElem!_pos a' _ (by omega)]
   · rfl
 
-@[simp] public theorem getElem_gemm (α : Float) (A : Mat m k) (B : Mat k n) (β : Float)
-    (C : Mat m n) (i j : Nat) (h : i < m ∧ j < n) :
+@[simp] public theorem getElem_gemm (α : Float) (A : PMat m k) (B : PMat k n) (β : Float)
+    (C : PMat m n) (i j : Nat) (h : i < m ∧ j < n) :
     (gemm α A B β C)[(i, j)] = gemmEntry α A B β C i j h.1 h.2 := by
   rw [gemm_eq]; simp [gemmModel]
 
-end Mat
+end PMat
 
 end BLAS.Float64

@@ -264,7 +264,16 @@ def gemmRows (rounds m : Nat) : IO (List Row × Nat) := do
   let t ← time rounds m fun q => (BLAS.Float64.Mat.gemm (α q) A B 0.5 C).data[0]!
   let t' ← time rounds m fun q => (refGemm m.toUSize (α q) A.data B.data 0.5 C.data)[0]!
   let tb ← time rounds m fun q => (BLAS.Float64.Mat.gemmBlocked (α q) A B 0.5 C).data[0]!
-  return ([⟨s!"gemm {m}", t, some t'⟩, ⟨s!"gemmBlocked {m}", tb, some t'⟩], 2 * m * m * m)
+  -- The same matrices as blocks of larger ones, with the leading dimension `m + 8`: they are
+  -- packed, and the result is copied back into `C`'s array.
+  let ld (X : BLAS.Float64.Mat m m) : BLAS.Float64.Mat m m :=
+    (BLAS.Float64.Mat.ofLd? (vec ((m + 8) * m)) 0 (m + 8)).getD X
+  let A₁ := ld A
+  let B₁ := ld B
+  let C₁ := ld C
+  let tl ← time rounds m fun q => (BLAS.Float64.Mat.gemmBlocked (α q) A₁ B₁ 0.5 C₁).data[0]!
+  return ([⟨s!"gemm {m}", t, some t'⟩, ⟨s!"gemmBlocked {m}", tb, some t'⟩,
+    ⟨s!"gemmBlocked {m}, ld = {m} + 8 / ld = {m}", tl, some tb⟩], 2 * m * m * m)
 
 /-- A time in milliseconds with three decimals. -/
 def fmt (t : Float) : String :=
@@ -298,10 +307,11 @@ public def main (args : List String) : IO Unit := do
         | none => ("—", "—")
       IO.println s!"| {r.name} | {fmt r.time} | {c} | {ratio} |"
     IO.println "\n`gemm` of square matrices, in GFLOP/s.\n"
-    IO.println "| Size | gemm | gemmBlocked | Reference |"
-    IO.println "|--:|--:|--:|--:|"
+    IO.println "| Size | gemm | gemmBlocked | gemmBlocked, ld = m + 8 | Reference |"
+    IO.println "|--:|--:|--:|--:|--:|"
     for (rs, flops) in gemm, m in gemmSizes do
       let g (t : Float) := fmt (flops.toFloat / (t * 1e6))
       match rs with
-      | [r, rb] => IO.println s!"| {m} | {g r.time} | {g rb.time} | {(r.ref.map g).getD "—"} |"
+      | [r, rb, rl] =>
+        IO.println s!"| {m} | {g r.time} | {g rb.time} | {g rl.time} | {(r.ref.map g).getD "—"} |"
       | _ => pure ()

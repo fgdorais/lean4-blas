@@ -49,8 +49,11 @@ other `data_` lemmas give the whole array as a `mapStride` of the old one. The l
 for every stride, and run as fast at stride `1` as loops over contiguous indices.
 `nrm2` doesn't scale its elements, so unlike the reference BLAS it can overflow or underflow.
 
-`Mat m n` is an `m × n` matrix, stored contiguously in column-major order: `A[(i, j)]` is at the
-index `i + m * j`. `Mat.gemm α A B β C`, for `A : Mat m k`, `B : Mat k n` and `C : Mat m n`, is
+`Mat m n` is an `m × n` matrix, stored in column-major order with an offset `off` and a leading
+dimension `ld ≥ m`, as in the reference BLAS: `A[(i, j)]` is at the index `off + ld * j + i`.
+`Mat.ofFn` makes a packed matrix (`off = 0`, `ld = m`), and `Mat.ofLd? a off ld` makes a view of
+the array `a`, such as a block of a larger matrix. `A.col j` and `A.row i` are vectors over the
+same array, with no copy. `Mat.gemm α A B β C`, for `A : Mat m k`, `B : Mat k n` and `C : Mat m n`, is
 `α * A * B + β * C`, over `C`, in the order of the reference BLAS:
 
 ```lean
@@ -58,12 +61,17 @@ index `i + m * j`. `Mat.gemm α A B β C`, for `A : Mat m k`, `B : Mat k n` and 
   Nat.fold k (fun l _ s => s + α * B[(l, j)] * A[(i, l)]) (β * C[(i, j)])
 ```
 
-Unlike the reference BLAS, `β = 0` doesn't clear `C`, so a `NaN` in `C` stays a `NaN`.
+Unlike the reference BLAS, `β = 0` doesn't clear `C`, so a `NaN` in `C` stays a `NaN`. `data_gemm`
+gives the whole array of the result, so the elements outside `C` are unchanged.
 
 `Mat.gemmBlocked` computes the same matrix about twice as fast. It works on blocks of 256 rows and
 128 terms, and sweeps the rows of a block for two columns of `C` and four terms at a time, which
 the C compiler vectorizes. Each element still gets its terms in the order of the specification, so
-`gemmBlocked_eq` proves that the result is the same to the bit, with the same `getElem` lemma.
+`gemmBlocked_eq_gemm` proves that the result is the same to the bit.
+
+Both run their kernels on packed matrices, `PMat m n`. A packed `Mat` goes to the kernel as it is,
+and a packed `C` is updated in place. Any other matrix is packed into a copy first, one `memmove`
+per column, and the columns of the result are copied back into `C`'s array.
 
 ## Installation
 
