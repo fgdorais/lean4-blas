@@ -238,17 +238,22 @@ def mat (m s : Nat) : BLAS.Float64.Mat m m :=
   .ofFn fun i j => ((i.val * 7 + j.val * 13 + s) % 11).toFloat - 5
 
 /-- The sizes of the `gemm` benchmarks. -/
-def gemmSizes : List Nat := [64, 256, 512]
+def gemmSizes : List Nat := [64, 256, 512, 1024]
 
-/-- The `gemm` benchmark for `m × m` matrices: its row, and its floating-point operations. -/
-def gemmRow (rounds m : Nat) : IO (Row × Nat) := do
+/--
+The `gemm` benchmarks for `m × m` matrices: the rows of `gemm` and `gemmBlocked`, and their
+floating-point operations. Each timed call depends on its argument, which is `m`, so that the
+compiler can't hoist it out of the timing loop.
+-/
+def gemmRows (rounds m : Nat) : IO (List Row × Nat) := do
   let A := mat m 1
   let B := mat m 2
   let C := mat m 3
-  let t ← time rounds m fun _ => (BLAS.Float64.Mat.gemm 1.5 A B 0.5 C).data[0]!
-  let t' ← time rounds m fun _ =>
-    (refGemm m.toUSize 1.5 A.data B.data 0.5 C.data)[0]!
-  return (⟨s!"gemm {m}", t, some t'⟩, 2 * m * m * m)
+  let α (q : Nat) := 1.5 + (q - m).toFloat
+  let t ← time rounds m fun q => (BLAS.Float64.Mat.gemm (α q) A B 0.5 C).data[0]!
+  let t' ← time rounds m fun q => (refGemm m.toUSize (α q) A.data B.data 0.5 C.data)[0]!
+  let tb ← time rounds m fun q => (BLAS.Float64.Mat.gemmBlocked (α q) A B 0.5 C).data[0]!
+  return ([⟨s!"gemm {m}", t, some t'⟩, ⟨s!"gemmBlocked {m}", tb, some t'⟩], 2 * m * m * m)
 
 /-- A time in milliseconds with three decimals. -/
 def fmt (t : Float) : String :=
@@ -267,8 +272,8 @@ public def main (args : List String) : IO Unit := do
   let n := nums[0]?.getD 1_000_000
   let rounds := nums[1]?.getD 10
   let rows ← rows rounds n
-  let gemm ← gemmSizes.mapM (gemmRow rounds)
-  let rows := rows ++ gemm.map (·.1)
+  let gemm ← gemmSizes.mapM (gemmRows rounds)
+  let rows := rows ++ (gemm.map (·.1)).flatten
   if tsv then
     for r in rows do
       IO.println s!"{r.name}\t{fmt r.time}"
@@ -282,8 +287,10 @@ public def main (args : List String) : IO Unit := do
         | none => ("—", "—")
       IO.println s!"| {r.name} | {fmt r.time} | {c} | {ratio} |"
     IO.println "\n`gemm` of square matrices, in GFLOP/s.\n"
-    IO.println "| Size | BLAS | Reference |"
-    IO.println "|--:|--:|--:|"
-    for (r, flops) in gemm do
+    IO.println "| Size | gemm | gemmBlocked | Reference |"
+    IO.println "|--:|--:|--:|--:|"
+    for (rs, flops) in gemm, m in gemmSizes do
       let g (t : Float) := fmt (flops.toFloat / (t * 1e6))
-      IO.println s!"| {r.name.drop 5} | {g r.time} | {(r.ref.map g).getD "—"} |"
+      match rs with
+      | [r, rb] => IO.println s!"| {m} | {g r.time} | {g rb.time} | {(r.ref.map g).getD "—"} |"
+      | _ => pure ()

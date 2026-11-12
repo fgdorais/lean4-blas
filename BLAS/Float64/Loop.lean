@@ -142,6 +142,42 @@ public theorem foldUpTo_eq {β : Type u} (n : Nat) (f : (i : Nat) → i < n → 
   · simpa using foldUpTo_loop_eq n f fu hf _ _ 0 0 (by simp) (by omega) init
   · rfl
 
+/-! ## Indices -/
+
+/-- `(x + y).toNat = x.toNat + y.toNat` when the sum doesn't wrap around. -/
+public theorem USize.toNat_add_of_lt {x y : USize} (h : x.toNat + y.toNat < USize.size) :
+    (x + y).toNat = x.toNat + y.toNat := by
+  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
+  rw [USize.toNat_add, Nat.mod_eq_of_lt (by omega)]
+
+/-- `(x * y).toNat = x.toNat * y.toNat` when the product doesn't wrap around. -/
+public theorem USize.toNat_mul_of_lt {x y : USize} (h : x.toNat * y.toNat < USize.size) :
+    (x * y).toNat = x.toNat * y.toNat := by
+  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
+  rw [USize.toNat_mul, Nat.mod_eq_of_lt (by omega)]
+
+/-- A program that writes `v` at a `USize` index runs as one that writes it with `set!`. -/
+public theorem Tail.run_set_eq_set! {N : Nat} {γ : Type} (t : InPlace.Tail N γ) (a : Float64Array)
+    (i : USize) (p : Nat) (hp : i.toNat = p) (v v' : Float) (hv : v = v') (h₁ h₂ h₃) :
+    t.run (a.set i.toNat v h₁) h₂ = t.run (a.set! p v') h₃ := by
+  subst hp hv
+  congr 1
+  simp [Float64Array.set!, h₁]
+
+/-- A program runs the same on equal arrays. -/
+public theorem Tail.run_congr {N : Nat} {γ : Type} (t : InPlace.Tail N γ) {a a' : Float64Array}
+    (e : a = a') (h : a.size = N) (h' : a'.size = N) : t.run a h = t.run a' h' := by
+  subst e; rfl
+
+/-- `set` is `set!` in bounds. -/
+public theorem Float64Array.set_eq_set! (a : Float64Array) (i : Nat) (v : Float) (h : i < a.size) :
+    a.set i v h = a.set! i v := by
+  simp [Float64Array.set!, h]
+
+/-- `getElem` is `getElem!` in bounds. -/
+public theorem Float64Array.getElem_eq_getElem! (a : Float64Array) (i : Nat) (h : i < a.size) :
+    a[i] = a[i]! := (getElem!_pos a i h).symm
+
 /-! ## Loops of loops -/
 
 /--
@@ -243,6 +279,57 @@ public theorem getElem!_iterRange_set! (off : Nat) (G : Nat → Float → Float)
         simp [getElem!_pos, hp, Ne.symm hp']
       rw [this]
       split <;> split <;> first | rfl | omega
+
+/-- `getElem!` of `set!`, in bounds. -/
+public theorem getElem!_set!_of_lt (a : Float64Array) (i : Nat) (v : Float) {q : Nat}
+    (hq : q < a.size) : (a.set! i v)[q]! = if i = q then v else a[q]! := by
+  rw [getElem!_pos (a.set! i v) q (by simpa using hq), getElem!_pos a q hq,
+    Float64Array.getElem_set!]
+
+/--
+A step that writes `G i a[off + i]!` at `off + i` and `G' i a[off' + i]!` at `off' + i`, for each
+`i` in `lo ≤ i < hi`, in two windows that don't overlap, maps the elements of each window by its
+function, and leaves the others.
+-/
+public theorem getElem!_iterRange_set2! (off off' : Nat) (G G' : Nat → Float → Float)
+    (lo hi : Nat) (hd : off + hi ≤ off') (a : Float64Array) (p : Nat) (hp : p < a.size) :
+    (iterRange (fun i a => (a.set! (off + i) (G i a[off + i]!)).set! (off' + i)
+        (G' i a[off' + i]!)) lo hi a)[p]! =
+      if off + lo ≤ p ∧ p < off + hi then G (p - off) a[p]!
+      else if off' + lo ≤ p ∧ p < off' + hi then G' (p - off') a[p]! else a[p]! := by
+  obtain ⟨d, hd'⟩ : ∃ d, hi - lo = d := ⟨_, rfl⟩
+  induction d generalizing lo a with
+  | zero =>
+    rw [iterRange_of_le _ (by omega)]
+    split
+    · omega
+    · split
+      · omega
+      · rfl
+  | succ d ih =>
+    rw [iterRange_of_lt _ (by omega), ih (lo + 1) _ (by simpa using hp) (by omega)]
+    have e : ∀ q, q < a.size →
+        ((a.set! (off + lo) (G lo a[off + lo]!)).set! (off' + lo) (G' lo a[off' + lo]!))[q]! =
+          if q = off' + lo then G' lo a[off' + lo]! else if q = off + lo then G lo a[off + lo]!
+          else a[q]! := by
+      intro q hq
+      rw [getElem!_set!_of_lt _ _ _ (by simpa using hq), getElem!_set!_of_lt _ _ _ hq]
+      have hne : off' ≠ off := by omega
+      by_cases h1 : q = off' + lo
+      · simp [h1]
+      · by_cases h2 : q = off + lo
+        · simp [h2, hne, hne.symm]
+        · simp [h1, h2, Ne.symm h1, Ne.symm h2]
+    simp only [e p hp]
+    by_cases h1 : p = off' + lo
+    · subst h1
+      simp only [show off' + lo - off' = lo by omega]
+      (repeat' split) <;> first | rfl | omega | simp_all
+    · by_cases h2 : p = off + lo
+      · subst h2
+        simp only [show off + lo - off = lo by omega]
+        (repeat' split) <;> first | rfl | omega | simp_all
+      · (repeat' split) <;> first | rfl | omega
 
 /--
 Runs a loop whose body runs a program that maps the array by `F j` and then runs the next step,

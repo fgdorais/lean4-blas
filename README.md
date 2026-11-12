@@ -6,8 +6,8 @@ Basic Linear Algebra Subprograms written entirely in Lean 4, on the unboxed arra
 [lean4-scalar-arrays](https://github.com/fgdorais/lean4-scalar-arrays), with no C code of its own.
 The routines come with proved specifications; their speed is measured, not promised.
 
-The library is at an early stage. It has the BLAS Level 1 routines and `gemm` on `Float64`; faster
-`gemm` kernels, strided vectors and Level 2 come next.
+The library is at an early stage. It has the BLAS Level 1 routines and `gemm` on `Float64`; strided
+vectors and Level 2 come next.
 
 ## Usage
 
@@ -53,6 +53,11 @@ index `i + m * j`. `Mat.gemm α A B β C`, for `A : Mat m k`, `B : Mat k n` and 
 ```
 
 Unlike the reference BLAS, `β = 0` doesn't clear `C`, so a `NaN` in `C` stays a `NaN`.
+
+`Mat.gemmBlocked` computes the same matrix about twice as fast. It works on blocks of 256 rows and
+128 terms, and sweeps the rows of a block for two columns of `C` and four terms at a time, which
+the C compiler vectorizes. Each element still gets its terms in the order of the specification, so
+`gemmBlocked_eq` proves that the result is the same to the bit, with the same `getElem` lemma.
 
 ## Installation
 

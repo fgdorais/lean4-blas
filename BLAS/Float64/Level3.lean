@@ -27,26 +27,6 @@ public theorem toNat_mul_add_le {m j : USize} {n p : Nat} (hj : j.toNat < n)
   rw [USize.toNat_mul, Nat.mod_eq_of_lt (by omega)]
   omega
 
-/-- `(x + y).toNat = x.toNat + y.toNat` when the sum doesn't wrap around. -/
-private theorem USize.toNat_add_of_lt {x y : USize} (h : x.toNat + y.toNat < USize.size) :
-    (x + y).toNat = x.toNat + y.toNat := by
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  rw [USize.toNat_add, Nat.mod_eq_of_lt (by omega)]
-
-/-- `(x * y).toNat = x.toNat * y.toNat` when the product doesn't wrap around. -/
-private theorem USize.toNat_mul_of_lt {x y : USize} (h : x.toNat * y.toNat < USize.size) :
-    (x * y).toNat = x.toNat * y.toNat := by
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  rw [USize.toNat_mul, Nat.mod_eq_of_lt (by omega)]
-
-/-- A program that writes `v` at a `USize` index runs as one that writes it with `set!`. -/
-private theorem Tail.run_set_eq_set! {N : Nat} {γ : Type} (t : InPlace.Tail N γ) (a : Float64Array)
-    (i : USize) (p : Nat) (hp : i.toNat = p) (v v' : Float) (hv : v = v') (h₁ h₂ h₃) :
-    t.run (a.set i.toNat v h₁) h₂ = t.run (a.set! p v') h₃ := by
-  subst hp hv
-  congr 1
-  simp [Float64Array.set!, h₁]
-
 /-- The elements of column `j` of an `m × n` matrix are in the window `m * j ≤ q < m * j + m`. -/
 private theorem col_window {m j' i j : Nat} (hi : i < m) :
     (m * j' ≤ i + m * j ∧ i + m * j < m * j' + m) ↔ j' = j := by
