@@ -5,13 +5,12 @@ testDriver = "BLASTest"
 # Linters that are off by default.
 leanOptions = { linter.missingDocs = true, linter.extra = true }
 
-# Tracks scalar-arrays' `main` for its strides and whole-loop lemmas (#91), until they are in a
-# release. The manifest pins the exact commit, since the kernels use the experimental `inplace`
-# notation, which is outside scalar-arrays' stability promise.
+# Pins an exact scalar-arrays release, since the kernels use the experimental `inplace` notation,
+# which is outside scalar-arrays' stability promise.
 [[require]]
 name = "lean4-scalar-arrays"
 git = "https://github.com/fgdorais/lean4-scalar-arrays"
-rev = "main"
+rev = "v1.4.0"
 
 [[lean_lib]]
 name = "BLAS"
