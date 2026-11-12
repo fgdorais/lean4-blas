@@ -6,8 +6,8 @@ Basic Linear Algebra Subprograms written entirely in Lean 4, on the unboxed arra
 [lean4-scalar-arrays](https://github.com/fgdorais/lean4-scalar-arrays), with no C code of its own.
 The routines come with proved specifications; their speed is measured, not promised.
 
-The library is at an early stage. It has the BLAS Level 1 routines, on strided vectors, and `gemm` on
-`Float64`; strided matrices and Level 2 come next.
+The library is at an early stage. It has, on `Float64`, the BLAS Level 1 routines on strided vectors,
+and `gemv`, `ger`, `trsv` and `gemm` on matrices with an offset and a leading dimension.
 
 ## Usage
 
@@ -72,6 +72,27 @@ the C compiler vectorizes. Each element still gets its terms in the order of the
 Both run their kernels on packed matrices, `PMat m n`. A packed `Mat` goes to the kernel as it is,
 and a packed `C` is updated in place. Any other matrix is packed into a copy first, one `memmove`
 per column, and the columns of the result are copied back into `C`'s array.
+
+The Level 2 routines run the loops of the reference BLAS directly on any `Mat` and `Vec`, with no
+packing, and their specifications are exact in the same way:
+
+| Routine | Result | Specification |
+|---|---|---|
+| `gemv α A x β y` | `α * A * x + β * y`, over `y` | `Nat.fold n (fun j _ s => s + α * x[j] * A[(i, j)]) (β * y[i])` |
+| `gemvT α A x β y` | `α * Aᵀ * x + β * y`, over `y` | `β * y[j] + α * Nat.fold m (fun i _ s => s + A[(i, j)] * x[i]) 0` |
+| `ger α x y A` | `α * x * yᵀ + A`, over `A` | `A[(i, j)] + x[i] * (α * y[j])` |
+| `trsv uplo diag A x` | `A⁻¹ * x` for a triangular `A`, over `x` | `getElem_trsv_lower`, `getElem_trsv_upper` |
+
+`trsv` takes the triangle as a `Uplo` (`.upper` or `.lower`) and the diagonal as a `Diag` (`.unit`
+or `.nonUnit`), and reads nothing else of `A`. Its specification is back substitution, in the order of
+the column-oriented loops: for the lower triangle, `y = trsv .lower d A x` satisfies
+
+```lean
+y[i] = d.apply (Nat.fold i (fun l _ s => s - y[l] * A[(i, l)]) x[i]) A[(i, i)]
+```
+
+where `d.apply v a` is `v / a`, or `v` for a unit diagonal. For the upper triangle, the terms run
+from `l = n - 1` down to `i + 1`.
 
 ## Installation
 

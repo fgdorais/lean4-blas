@@ -10,8 +10,8 @@ public import BLAS.Float64.Mat
 /-!
 # Level 2
 
-Matrix-vector operations: the products `gemv` and `gemvT`, the rank-one update `ger`, and the
-triangular solve `trsv`.
+Matrix-vector operations: the products `gemv` and `gemvT`, and the rank-one update `ger`. The
+triangular solve `trsv` is in `BLAS.Float64.Trsv`.
 
 Each routine runs the loops of the reference BLAS over `USize` indices when its arrays' sizes fit
 in a `USize`, and its model otherwise, so that its specification needs no hypothesis on the size.

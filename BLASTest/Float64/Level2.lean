@@ -138,3 +138,78 @@ def gerInPlace (m : Nat) : Bool :=
   BLASTest.addr (Mat.ger 1 (vec m 2) (vec m 3) A).data == p
 
 #guard gerInPlace 8
+
+/-! ## `trsv` -/
+
+-- `[[2, 0], [1, 1]] * y = [4, 3]` gives `y = [2, 1]`; `[[2, 1], [0, 1]] * y = [5, 1]` gives `[2, 1]`.
+#guard
+  let A : Mat 2 2 := .ofPMat ⟨.ofList [2, 1, 1, 1], by decide⟩
+  (Mat.trsv .lower .nonUnit A (.ofList [4, 3])).toList == [2, 1] &&
+    (Mat.trsv .upper .nonUnit A (.ofList [5, 1])).toList == [2, 1] &&
+    (Mat.trsv .lower .unit A (.ofList [4, 3])).toList == [4, -1] &&
+    (Mat.trsv .upper .unit A (.ofList [5, 1])).toList == [4, 1]
+
+/-- A matrix with the elements of `mat n n s`, and `n + 4 + i` on the diagonal. -/
+def triMat (n : Nat) (s : Nat := 0) (other : Float := 0) (uplo : Uplo := .lower) : Mat n n :=
+  .ofFn fun i j =>
+    if i.val = j.val then (n + 4 + i.val).toFloat
+    else if (uplo = .lower ∧ j.val < i.val) ∨ (uplo = .upper ∧ i.val < j.val) then
+      ((i.val * 7 + j.val * 13 + s) % 11).toFloat - 5
+    else other
+
+/-- The loops of the reference BLAS for `trsv`, on an `Array`. -/
+def trsvRef (uplo : Uplo) (d : Diag) (A : Mat n n) (x : Vec n) : List Float := Id.run do
+  let mut y := x.toList.toArray
+  let cols := match uplo with
+    | .lower => List.range n
+    | .upper => (List.range n).reverse
+  for j in cols do
+    let t := d.apply y[j]! (A[(j, j)]?.getD 0)
+    y := y.set! j t
+    let rows := match uplo with
+      | .lower => (List.range n).filter (j < ·)
+      | .upper => List.range j
+    for i in rows do
+      y := y.set! i (y[i]! - t * (A[(i, j)]?.getD 0))
+  return y.toList
+
+/--
+Whether `trsv` matches the reference loops, on packed operands and on operands with offsets, strides
+and leading dimensions, doesn't read the other triangle (nor the diagonal when it is unit), and
+leaves the rest of `x`'s array unchanged.
+-/
+def trsvMatches (n : Nat) (uplo : Uplo) (d : Diag) : Bool :=
+  let A := triMat n 1 0 uplo
+  let ok₁ := (Mat.trsv uplo d A (vec n 2)).toList == trsvRef uplo d A (vec n 2)
+  let nan : Float := 0 / 0
+  let B := triMat n 1 nan uplo
+  let B : Mat n n := match d with
+    | .nonUnit => B
+    | .unit => .ofFn fun i j => if i.val = j.val then nan else B[(i.val, j.val)]
+  let B' := (Mat.ofLd? (Mat.ofFn (m := n + 3) (n := n) fun i j =>
+    if h : i.val < n then B[(i.val, j.val)]'⟨h, j.isLt⟩ else mark).data 0 (n + 3)).getD B
+  let x := vecInc n 2 3 2
+  let y := Mat.trsv uplo d B' x
+  ok₁ && y.toList == trsvRef uplo d A (vec n 2) && marks y.data == marks x.data
+
+#guard [Uplo.lower, .upper].all fun u => [Diag.unit, .nonUnit].all fun d =>
+  trsvMatches 5 u d && trsvMatches 1 u d && trsvMatches 0 u d && trsvMatches 40 u d &&
+    trsvMatches 300 u d
+
+/-- The residual `A * y - x` of a solve, by `gemv`: zero up to rounding. -/
+def trsvResidual (n : Nat) (uplo : Uplo) : Float :=
+  let A := triMat n 1 0 uplo
+  let y := Mat.trsv uplo .nonUnit A (vec n 2)
+  let r := Mat.gemv 1 A y (-1) (vec n 2)
+  r.toList.foldl (fun s v => max s v.abs) 0
+
+#guard trsvResidual 50 .lower < 1e-12 && trsvResidual 50 .upper < 1e-12
+
+/-- Whether `trsv` updates an unshared `x` in place. -/
+def trsvInPlace (n : Nat) : Bool :=
+  let (p, x) := withAddr (vecInc n 1 2)
+  let (q, x') := withAddr (vecInc n 1 2 5)
+  BLASTest.addr (Mat.trsv .lower .nonUnit (triMat n) x).data == p &&
+    BLASTest.addr (Mat.trsv .upper .unit (triMat n 0 0 .upper) x').data == q
+
+#guard trsvInPlace 8

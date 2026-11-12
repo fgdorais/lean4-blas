@@ -31,6 +31,29 @@ public theorem USize.toNat_add_mul_of_lt {x y z : USize}
   rw [USize.toNat_add, USize.toNat_mul, Nat.mod_eq_of_lt (a := y.toNat * z.toNat) (by omega),
     Nat.mod_eq_of_lt h]
 
+/-- `(j + 1 + k).toNat = j.toNat + 1 + k.toNat` when the result doesn't wrap around. -/
+public theorem USize.toNat_succ_add {j k : USize} (h : j.toNat + 1 + k.toNat < USize.size) :
+    (j + 1 + k).toNat = j.toNat + 1 + k.toNat := by
+  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
+  rw [USize.toNat_add, USize.toNat_add, USize.toNat_one,
+    Nat.mod_eq_of_lt (a := j.toNat + 1) (by omega), Nat.mod_eq_of_lt (by omega)]
+
+/-- `(n - j - 1).toNat = n.toNat - j.toNat - 1` for `j < n`: the length of the rest after `j`. -/
+public theorem USize.toNat_sub_sub_one {n j : USize} (h : j.toNat < n.toNat) :
+    (n - j - 1).toNat = n.toNat - j.toNat - 1 := by
+  have h₁ : j ≤ n := USize.le_iff_toNat_le.2 (by omega)
+  rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 ?_), USize.toNat_sub_of_le _ _ h₁,
+    USize.toNat_one]
+  rw [USize.toNat_sub_of_le _ _ h₁, USize.toNat_one]; omega
+
+/-- `(n - 1 - k).toNat = n.toNat - 1 - k.toNat` for `k < n`: the index of the step `k` down. -/
+public theorem USize.toNat_sub_one_sub {n k : USize} (h : k.toNat < n.toNat) :
+    (n - 1 - k).toNat = n.toNat - 1 - k.toNat := by
+  have h₁ : 1 ≤ n := USize.le_iff_toNat_le.2 (by rw [USize.toNat_one]; omega)
+  rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 ?_), USize.toNat_sub_of_le _ _ h₁,
+    USize.toNat_one]
+  rw [USize.toNat_sub_of_le _ _ h₁, USize.toNat_one]; omega
+
 /--
 A vector of `n` floats, stored in a `Float64Array` from the index `off`, with the stride `inc`.
 The stride is positive, unless the vector has at most one element, so that its elements are at
@@ -89,6 +112,19 @@ public theorem toNat_index (x : Vec n) (hs : x.data.size < USize.size) {i : USiz
     have hc : x.inc.toUSize.toNat = x.inc := by
       simp [Nat.mod_eq_of_lt (show x.inc < USize.size by omega)]
     rw [USize.toNat_add_mul_of_lt (by rw [ho, hc]; omega), ho, hc]
+
+/--
+The `USize` index of element `j + 1 + k < n`, as the step `k` from the offset of element `j + 1`,
+doesn't wrap around.
+-/
+public theorem toNat_index_shift (x : Vec n) (hs : x.data.size < USize.size) {j k : USize}
+    (h : j.toNat + 1 + k.toNat < n) :
+    (x.off.toUSize + x.inc.toUSize * (j + 1) + x.inc.toUSize * k).toNat =
+      x.off + x.inc * (j.toNat + 1) + x.inc * k.toNat := by
+  have hn := x.le_size
+  have hjk := USize.toNat_succ_add (j := j) (k := k) (by omega)
+  rw [USize.add_assoc, ← USize.mul_add, x.toNat_index hs (i := j + 1 + k) (by omega), hjk,
+    Nat.mul_add x.inc (j.toNat + 1), Nat.add_assoc]
 
 /-- The `USize` index of element `i < n` is in the array. -/
 public theorem toNat_index_lt (x : Vec n) (hs : x.data.size < USize.size) {i : USize}

@@ -280,8 +280,8 @@ def level2Sizes : List Nat := [256, 1024, 2048]
 
 /--
 The Level 2 benchmarks for `m × m` matrices, ten calls per round: `gemv`, `gemvT` and `ger`, on
-packed operands, and `gemv` with `x` and `y` at stride 2. Each makes `2 * m * m` floating-point
-operations per call.
+packed operands, `gemv` with `x` and `y` at stride 2, and `trsv` on both triangles. Each makes
+`2 * m * m` floating-point operations per call, except `trsv`, which makes about `m * m`.
 -/
 def level2Rows (rounds m : Nat) : IO (List Row × Nat) := do
   let A := mat m 1
@@ -308,8 +308,21 @@ def level2Rows (rounds m : Nat) : IO (List Row × Nat) := do
     for _ in [0:reps] do
       y := BLAS.Float64.Mat.gemv (α q) A x2 0.5 y
     return y.data[0]!
+  let T : BLAS.Float64.Mat m m := .ofFn fun i j =>
+    if i.val = j.val then (m + 4 + i.val).toFloat else ((i.val * 7 + j.val * 13) % 11).toFloat - 5
+  let tl ← time rounds m fun q => Id.run do
+    let mut y := BLAS.Float64.Vec.scal (α q) x
+    for _ in [0:reps] do
+      y := BLAS.Float64.Mat.trsv .lower .nonUnit T y
+    return y.data[0]!
+  let tu ← time rounds m fun q => Id.run do
+    let mut y := BLAS.Float64.Vec.scal (α q) x
+    for _ in [0:reps] do
+      y := BLAS.Float64.Mat.trsv .upper .nonUnit T y
+    return y.data[0]!
   return ([⟨s!"gemv {m} ×{reps}", tv, none⟩, ⟨s!"gemvT {m} ×{reps}", tt, none⟩,
-    ⟨s!"ger {m} ×{reps}", tg, none⟩, ⟨s!"gemv {m} ×{reps}, stride 2 / stride 1", tv2, some tv⟩],
+    ⟨s!"ger {m} ×{reps}", tg, none⟩, ⟨s!"gemv {m} ×{reps}, stride 2 / stride 1", tv2, some tv⟩,
+    ⟨s!"trsv lower {m} ×{reps}", tl, none⟩, ⟨s!"trsv upper {m} ×{reps}", tu, none⟩],
     2 * m * m * reps)
 
 /-- A time in milliseconds with three decimals. -/
@@ -345,13 +358,14 @@ public def main (args : List String) : IO Unit := do
         | none => ("—", "—")
       IO.println s!"| {r.name} | {fmt r.time} | {c} | {ratio} |"
     IO.println "\nLevel 2 on square matrices, in GFLOP/s.\n"
-    IO.println "| Size | gemv | gemvT | ger | gemv, stride 2 |"
-    IO.println "|--:|--:|--:|--:|--:|"
+    IO.println "| Size | gemv | gemvT | ger | gemv, stride 2 | trsv, lower | trsv, upper |"
+    IO.println "|--:|--:|--:|--:|--:|--:|--:|"
     for (rs, flops) in level2, m in level2Sizes do
       let g (t : Float) := fmt (flops.toFloat / (t * 1e6))
       match rs with
-      | [v, t, r, v2] =>
-        IO.println s!"| {m} | {g v.time} | {g t.time} | {g r.time} | {g v2.time} |"
+      | [v, t, r, v2, tl, tu] =>
+        IO.println
+          s!"| {m} | {g v.time} | {g t.time} | {g r.time} | {g v2.time} | {g (2 * tl.time)} | {g (2 * tu.time)} |"
       | _ => pure ()
     IO.println "\n`gemm` of square matrices, in GFLOP/s.\n"
     IO.println "| Size | gemm | gemmBlocked | gemmBlocked, ld = m + 8 | Reference |"

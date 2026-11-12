@@ -604,4 +604,110 @@ public theorem iterRange_mapStride (a : Float64Array) (off inc lo hi n : Nat)
     rw [iterRange_succ _ (Nat.zero_le _), ih, mapStride_mapStride]
     simp only [Nat.fold_succ]
 
+/-- A stride over `lo ≤ i < hi` is a stride over a wider range that leaves the other steps. -/
+public theorem mapStride_widen (a : Float64Array) (off inc lo hi lo' hi' : Nat)
+    (g : Nat → Float → Float) (h₁ : lo' ≤ lo) (h₂ : hi ≤ hi') :
+    mapStride a off inc lo hi g =
+      mapStride a off inc lo' hi' fun i v => if lo ≤ i ∧ i < hi then g i v else v := by
+  apply ext_getElem (by simp)
+  intro p _ _
+  simp only [mapStride, getElem_ofFn]
+  by_cases hc : off ≤ p ∧ (p - off) % inc = 0 ∧ lo ≤ (p - off) / inc ∧ (p - off) / inc < hi
+  · rw [ite_eq_left hc, ite_eq_left ⟨hc.1, hc.2.1, by omega, by omega⟩,
+      ite_eq_left ⟨hc.2.2.1, hc.2.2.2⟩]
+  · rw [ite_eq_right hc]
+    split
+    · rename_i hc'
+      rw [ite_eq_right (fun h => hc ⟨hc'.1, hc'.2.1, h⟩)]
+    · rfl
+
+/-- Writing at the step `j` of a stride is a stride over the single step `j`. -/
+public theorem set_eq_mapStride (a : Float64Array) (off inc j : Nat) (v : Float)
+    (hinc : 0 < inc ∨ j = 0) (h : off + inc * j < a.size) :
+    a.set (off + inc * j) v h = mapStride a off inc j (j + 1) fun _ _ => v := by
+  obtain ⟨h₁, h₂, h₃⟩ := stride_index (off := off) hinc
+  apply ext_getElem (by simp)
+  intro p _ _
+  simp only [mapStride, getElem_ofFn, Float64Array.getElem_set]
+  by_cases hp : off + inc * j = p
+  · subst hp
+    rw [ite_eq_left rfl, ite_eq_left ⟨h₁, h₂, by omega, by omega⟩]
+  · rw [ite_eq_right hp, ite_eq_right]
+    intro ⟨h₁', h₂', h₃', h₄'⟩
+    exact hp (by rw [eq_stride_of_mod h₁' h₂', show (p - off) / inc = j by omega])
+
+/-- A stride from the step `s` is a stride from the offset of that step. -/
+public theorem mapStride_shift (a : Float64Array) (off inc s h : Nat) (g : Nat → Float → Float)
+    (hinc : 0 < inc ∨ h = 0) :
+    mapStride a (off + inc * s) inc 0 h g = mapStride a off inc s (s + h) fun i v => g (i - s) v := by
+  rcases hinc with hinc | rfl
+  · apply ext_getElem (by simp)
+    intro p _ _
+    simp only [mapStride, getElem_ofFn]
+    by_cases hp : off + inc * s ≤ p
+    · have e₁ : p - off = inc * s + (p - (off + inc * s)) := by omega
+      have em : (p - off) % inc = (p - (off + inc * s)) % inc := by
+        rw [e₁, Nat.mul_add_mod]
+      have ed : (p - off) / inc = s + (p - (off + inc * s)) / inc := by
+        rw [e₁, Nat.mul_add_div hinc]
+      simp only [em, ed, Nat.add_sub_cancel_left]
+      by_cases hc : (p - (off + inc * s)) % inc = 0 ∧ (p - (off + inc * s)) / inc < h
+      · rw [ite_eq_left ⟨hp, hc.1, Nat.zero_le _, hc.2⟩,
+          ite_eq_left ⟨by omega, hc.1, Nat.le_add_right _ _, Nat.add_lt_add_left hc.2 _⟩]
+      · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
+    · rw [ite_eq_right (by omega), ite_eq_right]
+      intro ⟨h₁, h₂, h₃, _⟩
+      have := eq_stride_of_mod h₁ h₂
+      have : inc * s ≤ inc * ((p - off) / inc) := Nat.mul_le_mul_left _ h₃
+      omega
+  · rw [mapStride_of_le _ _ _ _ _ _ (Nat.le_refl _), mapStride_of_le _ _ _ _ _ _ (by omega)]
+
+/-- The identity on a stride leaves the array unchanged. -/
+public theorem mapStride_id (a : Float64Array) (off inc lo hi : Nat) :
+    mapStride a off inc lo hi (fun _ v => v) = a := by
+  apply ext_getElem (by simp)
+  intro p _ _
+  simp only [mapStride, getElem_ofFn]
+  split <;> rfl
+
+/--
+Writing `t` at the step `j` of a stride of `n` steps, then updating the steps after `j` by `G` from
+the offset of the step `j + 1`, is a stride over the steps `j ≤ i < n`: the triangular update.
+-/
+public theorem set_mapStride_succ (a : Float64Array) (off inc j n : Nat) (t : Float)
+    (G : Nat → Float → Float) (hinc : 0 < inc ∨ n ≤ 1) (hj : j < n) (p : Nat)
+    (hp : p = off + inc * j) (h : p < a.size) :
+    mapStride (a.set p t h) (off + inc * (j + 1)) inc 0 (n - j - 1) G =
+      mapStride a off inc j n fun i v => if i = j then t else G (i - (j + 1)) v := by
+  subst hp
+  rw [set_eq_mapStride _ _ _ _ _ (by omega), mapStride_shift _ _ _ _ _ _ (by omega),
+    show j + 1 + (n - j - 1) = n by omega,
+    mapStride_widen _ _ _ j (j + 1) j n _ (Nat.le_refl _) (by omega),
+    mapStride_widen _ _ _ (j + 1) n j n _ (by omega) (Nat.le_refl _), mapStride_mapStride]
+  apply mapStride_congr
+  intro i v h₁ h₂
+  by_cases hi : i = j
+  · subst hi; simp [show ¬i + 1 ≤ i by omega]
+  · have : j + 1 ≤ i := by omega
+    simp [hi, this, h₂, show ¬i < j + 1 by omega]
+
+/--
+Writing `t` at the step `j` of a stride, then updating the steps before `j` by `G`, is a stride over
+the steps `i ≤ j`: the triangular update from the end.
+-/
+public theorem set_mapStride_pred (a : Float64Array) (off inc j : Nat) (t : Float)
+    (G : Nat → Float → Float) (hinc : 0 < inc ∨ j = 0) (p : Nat) (hp : p = off + inc * j)
+    (h : p < a.size) :
+    mapStride (a.set p t h) off inc 0 j G =
+      mapStride a off inc 0 (j + 1) fun i v => if i = j then t else G i v := by
+  subst hp
+  rw [set_eq_mapStride _ _ _ _ _ hinc,
+    mapStride_widen _ _ _ j (j + 1) 0 (j + 1) _ (Nat.zero_le _) (Nat.le_refl _),
+    mapStride_widen _ _ _ 0 j 0 (j + 1) _ (Nat.le_refl _) (by omega), mapStride_mapStride]
+  apply mapStride_congr
+  intro i v _ h₂
+  by_cases hi : i = j
+  · subst hi; simp
+  · simp [hi, show i < j by omega, show ¬j ≤ i by omega]
+
 end BLAS.Float64
