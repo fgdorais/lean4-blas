@@ -132,8 +132,7 @@ public def trsvLowerData (d : Diag) (A : Mat n n) (x : Vec n) : Float64Array :=
         let v ← a[o + c * j]
         let t := d.apply v (A.uget ao al rfl rfl hs.1 j j (by lia) (by lia))
         a[o + c * j] := t
-        have hr : (nu - j - 1).toNat = n - j.toNat - 1 := by
-          rw [USize.toNat_sub_sub_one (by lia), hnu]
+        have hr : (nu - j - 1).toNat = n - j.toNat - 1 := by grind
         for k in 0...(nu - j - 1) do
           have hjk : j.toNat + 1 + k.toNat < n :=
             add_one_add_lt (by rw [← hr]; assumption)
@@ -161,8 +160,7 @@ public theorem trsvLowerData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
     · intro j _ hj next a h
       rw [hnu] at hj
       simp only [Tail.run_readThen, Tail.run_writeThen]
-      have hr : (n.toUSize - j - 1).toNat = n - j.toNat - 1 := by
-        rw [USize.toNat_sub_sub_one (by lia), hnu]
+      have hr : (n.toUSize - j - 1).toNat = n - j.toNat - 1 := by grind
       have hp : (x.off.toUSize + x.inc.toUSize * j).toNat = x.off + x.inc * j.toNat :=
         x.toNat_index hs.2 hj
       have hsz := Nat.lt_of_le_of_lt x.le_size hs.2
@@ -183,7 +181,7 @@ public theorem trsvLowerData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
       · intro k _ hk v
         rw [hr] at hk
         simp only [uget_eq_getElem, getElem_def, hp, getElem!_pos a (x.off + x.inc * j.toNat) (show _ < a.size by rw [h]; exact x.index_lt hj),
-          USize.toNat_succ_add (show j.toNat + 1 + k.toNat < USize.size by lia)]
+          show (j + 1 + k).toNat = j.toNat + 1 + k.toNat by grind]
         rw [getElem!_pos A.data (A.off + A.ld * j.toNat + j.toNat) (A.index_lt hj hj),
           getElem!_pos A.data (A.off + A.ld * j.toNat + (j.toNat + 1 + k.toNat))
             (A.index_lt (by lia) hj)]
@@ -259,8 +257,7 @@ public def trsvUpperData (d : Diag) (A : Mat n n) (x : Vec n) : Float64Array :=
     let al := A.ld.toUSize
     (inplace a do
       for k in 0...nu do
-        have hj : (nu - 1 - k).toNat = n - 1 - k.toNat := by
-          rw [USize.toNat_sub_one_sub (by lia), hnu]
+        have hj : (nu - 1 - k).toNat = n - 1 - k.toNat := by grind
         have hjn : (nu - 1 - k).toNat < n := by lia
         have hk : (o + c * (nu - 1 - k)).toNat < a.size := x.toNat_index_lt hs.2 hjn
         let v ← a[o + c * (nu - 1 - k)]
@@ -286,8 +283,7 @@ public theorem trsvUpperData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
     · intro k _ hk next a h
       rw [hnu] at hk
       simp only [Tail.run_readThen, Tail.run_writeThen]
-      have hj : (n.toUSize - 1 - k).toNat = n - 1 - k.toNat := by
-        rw [USize.toNat_sub_one_sub (by lia), hnu]
+      have hj : (n.toUSize - 1 - k).toNat = n - 1 - k.toNat := by grind
       have hp : (x.off.toUSize + x.inc.toUSize * (n.toUSize - 1 - k)).toNat =
           x.off + x.inc * (n - 1 - k.toNat) := by
         rw [x.toNat_index hs.2 (by lia), hj]

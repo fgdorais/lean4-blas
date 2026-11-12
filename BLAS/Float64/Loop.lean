@@ -35,7 +35,7 @@ which costs about a third of a reduction's time. `foldUpTo_eq` needs `fu` to agr
 -/
 @[specialize] public def foldUpTo {β : Type u} (n : Nat) (f : (i : Nat) → i < n → β → β)
     (fu : (i : USize) → i.toNat < n → β → β) (init : β) : β :=
-  if hn : n < USize.size then loop n.toUSize (by simp [Nat.mod_eq_of_lt hn]) 0 init
+  if hn : n < USize.size then loop n.toUSize (by grind) 0 init
   else Nat.fold n f init
 where
   /-- The loop from the index `i`, up to the bound `m`, which is `n`. -/
@@ -43,11 +43,7 @@ where
     if hi : i < m then loop m hm (i + 1) (fu i (hm ▸ hi) b) else b
   termination_by m.toNat - i.toNat
   decreasing_by
-    rw [USize.lt_iff_toNat_lt] at hi
-    have : m.toNat < USize.size := m.toNat_lt_size
-    have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-    rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]
-    lia
+    grind
 
 private theorem foldUpTo_loop_eq {β : Type u} (n : Nat) (f : (i : Nat) → i < n → β → β)
     (fu : (i : USize) → i.toNat < n → β → β) (hf : ∀ i h b, fu i h b = f i.toNat h b)
@@ -58,16 +54,13 @@ private theorem foldUpTo_loop_eq {β : Type u} (n : Nat) (f : (i : Nat) → i < 
   obtain ⟨d, hd⟩ : ∃ d, n - k = d := ⟨_, rfl⟩
   induction d generalizing i k with
   | zero =>
-    rw [foldUpTo.loop, dite_eq_right_of_eq_false (eq_false (by rw [USize.lt_iff_toNat_lt]; lia))]
+    rw [foldUpTo.loop, dite_eq_right_of_eq_false (eq_false (by grind))]
     obtain rfl : k = n := by lia
     rfl
   | succ d ih =>
     have hi : i.toNat < n := by lia
-    have hsucc : (i + 1).toNat = k + 1 := by
-      have : m.toNat < USize.size := m.toNat_lt_size
-      have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia), hk]
-    rw [foldUpTo.loop, dite_eq_left_of_eq_true (eq_true (by rw [USize.lt_iff_toNat_lt]; lia)),
+    have hsucc : (i + 1).toNat = k + 1 := by grind
+    rw [foldUpTo.loop, dite_eq_left_of_eq_true (eq_true (by grind)),
       hf]
     have := ih (i + 1) (k + 1) hsucc (by lia) (by lia)
     rw [Nat.fold_succ] at this

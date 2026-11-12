@@ -100,9 +100,9 @@ theorem getElem!_sweep4 (a c : Float64Array) (cj cj' a₀ a₁ a₂ a₃ len hc 
     apply Tail.run_congr
     have hi' : i.toNat < len.toNat := by simpa using hi
     have e : ∀ {x : USize}, x.toNat + len.toNat ≤ c.size → (x + i).toNat = x.toNat + i.toNat :=
-      fun h => USize.toNat_add_of_lt (by lia)
+      fun _ => by grind
     have ea : ∀ {x : USize}, x.toNat + len.toNat ≤ a.size → (x + i).toNat = x.toNat + i.toNat :=
-      fun h => USize.toNat_add_of_lt (by lia)
+      fun _ => by grind
     simp only [Float64Array.uget_eq_getElem, e hc, e hc', ea h₀, ea h₁, ea h₂, ea h₃,
       Float64Array.set_eq_set!, Float64Array.getElem_eq_getElem!]
     rw [getElem!_set!_of_lt _ _ _ (by lia), ite_eq_right (by lia)]
@@ -130,9 +130,9 @@ theorem getElem!_sweep2 (a c : Float64Array) (cj cj' al len hc hc' ha) (t s : Fl
     apply Tail.run_congr
     have hi' : i.toNat < len.toNat := by simpa using hi
     have e : ∀ {x : USize}, x.toNat + len.toNat ≤ c.size → (x + i).toNat = x.toNat + i.toNat :=
-      fun h => USize.toNat_add_of_lt (by lia)
+      fun _ => by grind
     have ea : ∀ {x : USize}, x.toNat + len.toNat ≤ a.size → (x + i).toNat = x.toNat + i.toNat :=
-      fun h => USize.toNat_add_of_lt (by lia)
+      fun _ => by grind
     simp only [Float64Array.uget_eq_getElem, e hc, e hc', ea ha, Float64Array.set_eq_set!,
       Float64Array.getElem_eq_getElem!]
     rw [getElem!_set!_of_lt _ _ _ (by lia), ite_eq_right (by lia)]
@@ -155,9 +155,9 @@ theorem getElem!_sweep1 (a c : Float64Array) (cj al len hc ha) (t : Float)
     apply Tail.run_congr
     have hi' : i.toNat < len.toNat := by simpa using hi
     have e : ∀ {x : USize}, x.toNat + len.toNat ≤ c.size → (x + i).toNat = x.toNat + i.toNat :=
-      fun h => USize.toNat_add_of_lt (by lia)
+      fun _ => by grind
     have ea : ∀ {x : USize}, x.toNat + len.toNat ≤ a.size → (x + i).toNat = x.toNat + i.toNat :=
-      fun h => USize.toNat_add_of_lt (by lia)
+      fun _ => by grind
     simp only [Float64Array.uget_eq_getElem, e hc, ea ha, Float64Array.set_eq_set!,
       Float64Array.getElem_eq_getElem!]
 
@@ -186,44 +186,36 @@ public def gemmPairTerms (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFi
   have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
       (k + 128) * (m + 256) < USize.size := hs
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt (show m < USize.size by lia)]
-  have hku : k.toUSize.toNat = k := by simp [Nat.mod_eq_of_lt (show k < USize.size by lia)]
-  have hj1 : (j + 1).toNat = j.toNat + 1 := by
-    rw [USize.toNat_add_of_lt (by simp only [USize.toNat_one]; lia), USize.toNat_one]
-  have hsub : (l₁ - l).toNat = l₁.toNat - l.toNat :=
-    USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le]; lia)
+  have hmu : m.toUSize.toNat = m := by grind
+  have hku : k.toUSize.toNat = k := by grind
+  have hj1 : (j + 1).toNat = j.toNat + 1 := by grind
+  have hsub : (l₁ - l).toNat = l₁.toNat - l.toNat := by grind
   have hcj : (m.toUSize * j + i₀).toNat + len.toNat ≤ c.size := by
-    rw [hc]; exact toNat_mul_add_add_le hmu (by lia) hw hs'.1
+    rw [hc]; exact toNat_mul_add_add_le hmu (by lia) hw
   have hcj' : (m.toUSize * (j + 1) + i₀).toNat + len.toNat ≤ c.size := by
-    rw [hc]; exact toNat_mul_add_add_le hmu (by lia) hw hs'.1
+    rw [hc]; exact toNat_mul_add_add_le hmu (by lia) hw
   have hbj : (k.toUSize * j).toNat + k.toUSize.toNat ≤ B.data.size := by
     rw [B.size_data]
-    exact toNat_mul_add_le (n := n) (by lia) (by rw [hku]; exact Nat.le_refl _) hs'.2.2.1
+    exact toNat_mul_add_le (n := n) (by lia) (by rw [hku]; exact Nat.le_refl _)
   have hbj' : (k.toUSize * (j + 1)).toNat + k.toUSize.toNat ≤ B.data.size := by
     rw [B.size_data]
-    exact toNat_mul_add_le (n := n) (by lia) (by rw [hku]; exact Nat.le_refl _) hs'.2.2.1
+    exact toNat_mul_add_le (n := n) (by lia) (by rw [hku]; exact Nat.le_refl _)
   if h4 : 4 ≤ l₁ - l then
-    have h4' : l.toNat + 4 ≤ l₁.toNat := by
-      rw [USize.le_iff_toNat_le, hsub] at h4; simp at h4; lia
+    have h4' : l.toNat + 4 ≤ l₁.toNat := by grind
     let p₁ := l + 1
-    have hp₁ : p₁.toNat = l.toNat + 1 := by
-      rw [USize.toNat_add_of_lt (by simp only [USize.toNat_one]; lia), USize.toNat_one]
+    have hp₁ : p₁.toNat = l.toNat + 1 := by grind
     let p₂ := p₁ + 1
-    have hp₂ : p₂.toNat = l.toNat + 2 := by
-      rw [USize.toNat_add_of_lt (by simp only [USize.toNat_one]; lia), USize.toNat_one]; lia
+    have hp₂ : p₂.toNat = l.toNat + 2 := by grind
     let p₃ := p₂ + 1
-    have hp₃ : p₃.toNat = l.toNat + 3 := by
-      rw [USize.toNat_add_of_lt (by simp only [USize.toNat_one]; lia), USize.toNat_one]; lia
-    have hp₄ : (p₃ + 1).toNat = l.toNat + 4 := by
-      rw [USize.toNat_add_of_lt (by simp only [USize.toNat_one]; lia), USize.toNat_one]; lia
+    have hp₃ : p₃.toNat = l.toNat + 3 := by grind
+    have hp₄ : (p₃ + 1).toNat = l.toNat + 4 := by grind
     let c' := sweep4 A.data c (m.toUSize * j + i₀) (m.toUSize * (j + 1) + i₀)
       (m.toUSize * l + i₀) (m.toUSize * p₁ + i₀) (m.toUSize * p₂ + i₀) (m.toUSize * p₃ + i₀) len
       hcj hcj'
-      (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw hs'.2.1)
-      (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw hs'.2.1)
-      (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw hs'.2.1)
-      (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw hs'.2.1)
+      (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw)
+      (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw)
+      (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw)
+      (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw)
       (α * B.data.uget (k.toUSize * j + l)
         (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * j + p₁)
@@ -244,10 +236,9 @@ public def gemmPairTerms (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFi
       (by rw [c'.2, hc])
   else if h1 : l < l₁ then
     have h1' : l.toNat < l₁.toNat := h1
-    have hl1 : (l + 1).toNat = l.toNat + 1 := by
-      rw [USize.toNat_add_of_lt (by simp only [USize.toNat_one]; lia), USize.toNat_one]
+    have hl1 : (l + 1).toNat = l.toNat + 1 := by grind
     have ha : (m.toUSize * l + i₀).toNat + len.toNat ≤ A.data.size := by
-      rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw hs'.2.1
+      rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw
     let c' := sweep2 A.data c (m.toUSize * j + i₀) (m.toUSize * (j + 1) + i₀)
       (m.toUSize * l + i₀) len hcj hcj' ha
       (α * B.data.uget (k.toUSize * j + l) (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
@@ -269,20 +260,18 @@ public def gemmColTerms (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFit
   have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
       (k + 128) * (m + 256) < USize.size := hs
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt (show m < USize.size by lia)]
-  have hnu : n.toUSize.toNat = n := by simp [Nat.mod_eq_of_lt (show n < USize.size by lia)]
-  have hku : k.toUSize.toNat = k := by simp [Nat.mod_eq_of_lt (show k < USize.size by lia)]
+  have hmu : m.toUSize.toNat = m := by grind
+  have hnu : n.toUSize.toNat = n := by grind
+  have hku : k.toUSize.toNat = k := by grind
   if h1 : l < l₁ then
     have h1' : l.toNat < l₁.toNat := h1
-    have hl1 : (l + 1).toNat = l.toNat + 1 := by
-      rw [USize.toNat_add_of_lt (by simp only [USize.toNat_one]; lia), USize.toNat_one]
+    have hl1 : (l + 1).toNat = l.toNat + 1 := by grind
     have hbj : (k.toUSize * j).toNat + k.toUSize.toNat ≤ B.data.size := by
       rw [B.size_data]
-      exact toNat_mul_add_le (n := n) (by lia) (by rw [hku]; exact Nat.le_refl _) hs'.2.2.1
+      exact toNat_mul_add_le (n := n) (by lia) (by rw [hku]; exact Nat.le_refl _)
     let c' := sweep1 A.data c (m.toUSize * j + i₀) (m.toUSize * l + i₀) len
-      (by rw [hc]; exact toNat_mul_add_add_le hmu (by lia) hw hs'.1)
-      (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw hs'.2.1)
+      (by rw [hc]; exact toNat_mul_add_add_le hmu (by lia) hw)
+      (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw)
       (α * B.data.uget (k.toUSize * j + l)
         (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
     gemmColTerms α A B hs j hj i₀ len hw (l + 1) l₁ (by rw [hl1]; lia) hl₁ c'.1
@@ -303,21 +292,17 @@ public def gemmCols (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFits m 
   have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
       (k + 128) * (m + 256) < USize.size := hs
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt (show m < USize.size by lia)]
-  have hnu : n.toUSize.toNat = n := by simp [Nat.mod_eq_of_lt (show n < USize.size by lia)]
-  have hku : k.toUSize.toNat = k := by simp [Nat.mod_eq_of_lt (show k < USize.size by lia)]
-  have hsub : (n.toUSize - j).toNat = n - j.toNat :=
-    by rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le]; lia), hnu]
+  have hmu : m.toUSize.toNat = m := by grind
+  have hnu : n.toUSize.toNat = n := by grind
+  have hku : k.toUSize.toNat = k := by grind
+  have hsub : (n.toUSize - j).toNat = n - j.toNat := by grind
   if h2 : 2 ≤ n.toUSize - j then
-    have h2' : j.toNat + 2 ≤ n := by
-      rw [USize.le_iff_toNat_le, hsub] at h2; simp at h2; lia
-    have hj2 : (j + 2).toNat = j.toNat + 2 := by
-      rw [USize.toNat_add_of_lt (by simp; lia)]; simp
+    have h2' : j.toNat + 2 ≤ n := by grind
+    have hj2 : (j + 2).toNat = j.toNat + 2 := by grind
     let c' := gemmPairTerms α A B hs j (by lia) i₀ len hw l₀ l₁ hl hl₁ c hc
     gemmCols α A B hs i₀ len hw l₀ l₁ hl hl₁ (j + 2) (by rw [hj2]; lia) c'.1 c'.2
   else if h1 : j < n.toUSize then
-    gemmColTerms α A B hs j (by have : j.toNat < n.toUSize.toNat := h1; lia) i₀ len hw l₀ l₁
+    gemmColTerms α A B hs j (by grind) i₀ len hw l₀ l₁
       hl hl₁ c hc
   else ⟨c, hc⟩
 termination_by n - j.toNat
@@ -334,27 +319,17 @@ public def gemmRowBlocks (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFi
   have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
       (k + 128) * (m + 256) < USize.size := hs
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt (show m < USize.size by lia)]
-  have hnu : n.toUSize.toNat = n := by simp [Nat.mod_eq_of_lt (show n < USize.size by lia)]
-  have hku : k.toUSize.toNat = k := by simp [Nat.mod_eq_of_lt (show k < USize.size by lia)]
+  have hmu : m.toUSize.toNat = m := by grind
+  have hnu : n.toUSize.toNat = n := by grind
+  have hku : k.toUSize.toNat = k := by grind
   if h : i₀ < m.toUSize then
-    have h' : i₀.toNat < m := by have : i₀.toNat < m.toUSize.toNat := h; lia
+    have h' : i₀.toNat < m := by grind
     have h256 : (256 : USize).toNat = 256 := by simp
-    have hsub : (m.toUSize - i₀).toNat = m - i₀.toNat := by
-      rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le]; lia), hmu]
+    have hsub : (m.toUSize - i₀).toNat = m - i₀.toNat := by grind
     let len := if m.toUSize - i₀ < 256 then m.toUSize - i₀ else 256
     have hlen : len.toNat = min (m - i₀.toNat) 256 := by
-      simp only [len]
-      split
-      · rename_i h
-        rw [USize.lt_iff_toNat_lt, hsub, h256] at h
-        rw [hsub]; lia
-      · rename_i h
-        rw [USize.lt_iff_toNat_lt, hsub, h256] at h
-        rw [h256]; lia
-    have hnext : (i₀ + 256).toNat = i₀.toNat + 256 := by
-      rw [USize.toNat_add_of_lt (by rw [h256]; lia), h256]
+      simp only [len]; split <;> grind
+    have hnext : (i₀ + 256).toNat = i₀.toNat + 256 := by grind
     let c' := gemmCols α A B hs i₀ len (by lia) l₀ l₁ hl hl₁ 0 (by simp) c hc
     gemmRowBlocks α A B hs l₀ l₁ hl hl₁ (i₀ + 256) (by lia) c'.1 c'.2
   else ⟨c, hc⟩
@@ -368,15 +343,13 @@ public def gemmTermBlocks (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmF
   have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
       (k + 128) * (m + 256) < USize.size := hs
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt (show m < USize.size by lia)]
-  have hnu : n.toUSize.toNat = n := by simp [Nat.mod_eq_of_lt (show n < USize.size by lia)]
-  have hku : k.toUSize.toNat = k := by simp [Nat.mod_eq_of_lt (show k < USize.size by lia)]
+  have hmu : m.toUSize.toNat = m := by grind
+  have hnu : n.toUSize.toNat = n := by grind
+  have hku : k.toUSize.toNat = k := by grind
   if h : l₀ < k.toUSize then
-    have h' : l₀.toNat < k := by have : l₀.toNat < k.toUSize.toNat := h; lia
+    have h' : l₀.toNat < k := by grind
     have h128 : (128 : USize).toNat = 128 := by simp
-    have hsub : (k.toUSize - l₀).toNat = k - l₀.toNat := by
-      rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le]; lia), hku]
+    have hsub : (k.toUSize - l₀).toNat = k - l₀.toNat := by grind
     let l₁ := if k.toUSize - l₀ < 128 then k.toUSize else l₀ + 128
     have hl₁ : l₁.toNat = min k (l₀.toNat + 128) := by
       simp only [l₁]
@@ -386,7 +359,7 @@ public def gemmTermBlocks (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmF
         rw [hku]; lia
       · rename_i h
         rw [USize.lt_iff_toNat_lt, hsub, h128] at h
-        rw [USize.toNat_add_of_lt (by rw [h128]; lia), h128]; lia
+        grind
     let c' := gemmRowBlocks α A B hs l₀ l₁ (by lia) (by lia) 0 (by simp) c hc
     gemmTermBlocks α A B hs l₁ (by lia) c'.1 c'.2
   else ⟨c, hc⟩
@@ -408,10 +381,9 @@ public def gemmBlocked (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
     have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
         m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
         (k + 128) * (m + 256) < USize.size := hs
-    have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-    have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt (show m < USize.size by lia)]
-    have hnu : n.toUSize.toNat = n := by simp [Nat.mod_eq_of_lt (show n < USize.size by lia)]
-    have hku : k.toUSize.toNat = k := by simp [Nat.mod_eq_of_lt (show k < USize.size by lia)]
+    have hmu : m.toUSize.toNat = m := by grind
+    have hnu : n.toUSize.toNat = n := by grind
+    have hku : k.toUSize.toNat = k := by grind
     let mu := m.toUSize
     let c := C.data
     have hc : c.size = m * n := C.size_data
@@ -420,7 +392,6 @@ public def gemmBlocked (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
         let cj := mu * j
         have hcj : cj.toNat + mu.toNat ≤ c.size :=
           toNat_mul_add_le (n := n) (by lia) (by rw [hmu, hc]; exact Nat.le_refl _)
-            (by rw [hc]; exact hs'.1)
         for i in 0...mu do
           c[cj + i] := β * c[cj + i]
     then fun _ c' h =>
@@ -599,11 +570,9 @@ theorem gemmPairTerms_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float
   have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
       (k + 128) * (m + 256) < USize.size := hs
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt (show m < USize.size by lia)]
-  have hku : k.toUSize.toNat = k := by simp [Nat.mod_eq_of_lt (show k < USize.size by lia)]
-  have hj1 : (j + 1).toNat = j.toNat + 1 := by
-    rw [USize.toNat_add_of_lt (by simp only [USize.toNat_one]; lia), USize.toNat_one]
+  have hmu : m.toUSize.toNat = m := by grind
+  have hku : k.toUSize.toNat = k := by grind
+  have hj1 : (j + 1).toNat = j.toNat + 1 := by grind
   have hcjN : (m.toUSize * j + i₀).toNat = m * j.toNat + i₀.toNat :=
     toNat_mul_add_eq hmu (show j.toNat < n by lia) (by lia) hs'.1
   have hcj'N : (m.toUSize * (j + 1) + i₀).toNat = m * (j.toNat + 1) + i₀.toNat := by
@@ -622,12 +591,8 @@ theorem gemmPairTerms_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float
   rw [gemmPairTerms]
   split
   · rename_i h4
-    have h4' : l.toNat + 4 ≤ l₁.toNat := by
-      rw [USize.le_iff_toNat_le, USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le]; lia)]
-        at h4
-      simp at h4; lia
-    have e1 : ∀ x : USize, x.toNat + 1 ≤ k → (x + 1).toNat = x.toNat + 1 := fun x hx => by
-      rw [USize.toNat_add_of_lt (by simp only [USize.toNat_one]; lia), USize.toNat_one]
+    have h4' : l.toNat + 4 ≤ l₁.toNat := by grind
+    have e1 : ∀ x : USize, x.toNat + 1 ≤ k → (x + 1).toNat = x.toNat + 1 := fun x hx => by grind
     have hp₁ : (l + 1).toNat = l.toNat + 1 := e1 _ (by lia)
     have hp₂ : (l + 1 + 1).toNat = l.toNat + 2 := by rw [e1 _ (by lia), hp₁]
     have hp₃ : (l + 1 + 1 + 1).toNat = l.toNat + 3 := by rw [e1 _ (by lia), hp₂]
@@ -664,8 +629,7 @@ theorem gemmPairTerms_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float
   · split
     · rename_i h1
       have h1' : l.toNat < l₁.toNat := h1
-      have hl1 : (l + 1).toNat = l.toNat + 1 := by
-        rw [USize.toNat_add_of_lt (by simp only [USize.toNat_one]; lia), USize.toNat_one]
+      have hl1 : (l + 1).toNat = l.toNat + 1 := by grind
       dsimp only
       refine GemmInv.congr (ih (l₁.toNat - (l.toNat + 1)) (by lia) (l + 1) _ _ _
         (fun r j' => if i₀.toNat ≤ r ∧ r < i₀.toNat + len.toNat ∧
@@ -711,9 +675,8 @@ theorem gemmColTerms_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float)
   have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
       (k + 128) * (m + 256) < USize.size := hs
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt (show m < USize.size by lia)]
-  have hku : k.toUSize.toNat = k := by simp [Nat.mod_eq_of_lt (show k < USize.size by lia)]
+  have hmu : m.toUSize.toNat = m := by grind
+  have hku : k.toUSize.toNat = k := by grind
   have hcjN : (m.toUSize * j + i₀).toNat = m * j.toNat + i₀.toNat :=
     toNat_mul_add_eq hmu hj (by lia) hs'.1
   have hA : ∀ x : USize, x.toNat < k →
@@ -731,8 +694,7 @@ theorem gemmColTerms_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float)
   split
   · rename_i h1
     have h1' : l.toNat < l₁.toNat := h1
-    have hl1 : (l + 1).toNat = l.toNat + 1 := by
-      rw [USize.toNat_add_of_lt (by simp only [USize.toNat_one]; lia), USize.toNat_one]
+    have hl1 : (l + 1).toNat = l.toNat + 1 := by grind
     dsimp only
     refine GemmInv.congr (ih (l₁.toNat - (l.toNat + 1)) (by lia) (l + 1) _ _ _
       (fun r j' => if i₀.toNat ≤ r ∧ r < i₀.toNat + len.toNat ∧ j' = j.toNat
@@ -775,20 +737,16 @@ theorem gemmCols_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C 
   have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
       (k + 128) * (m + 256) < USize.size := hs
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  have hnu : n.toUSize.toNat = n := by simp [Nat.mod_eq_of_lt (show n < USize.size by lia)]
+  have hnu : n.toUSize.toNat = n := by grind
   obtain ⟨d, hd⟩ : ∃ d, n - j.toNat = d := ⟨_, rfl⟩
   induction d using Nat.strongRecOn generalizing j c cnt with
   | _ d ih =>
-  have hsub : (n.toUSize - j).toNat = n - j.toNat :=
-    by rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le]; lia), hnu]
+  have hsub : (n.toUSize - j).toNat = n - j.toNat := by grind
   rw [gemmCols]
   split
   · rename_i h2
-    have h2' : j.toNat + 2 ≤ n := by
-      rw [USize.le_iff_toNat_le, hsub] at h2; simp at h2; lia
-    have hj2 : (j + 2).toNat = j.toNat + 2 := by
-      rw [USize.toNat_add_of_lt (by simp; lia)]; simp
+    have h2' : j.toNat + 2 ≤ n := by grind
+    have hj2 : (j + 2).toNat = j.toNat + 2 := by grind
     dsimp only
     have h₁ := gemmPairTerms_inv α A B β C hs j (by lia) i₀ len hw l₀ l₁ hl hl₁ c hc cnt hinv
       (fun r hr₁ hr₂ => ⟨hcnt r _ hr₁ hr₂ (Nat.le_refl _) (by lia),
@@ -812,9 +770,8 @@ theorem gemmCols_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C 
         rw [ite_eq_right (hW' _), ite_eq_right (hW' _), ite_eq_right (hW' _)]
   · split
     · rename_i h2 h1
-      have h1' : j.toNat < n := by have : j.toNat < n.toUSize.toNat := h1; lia
-      have hlast : j.toNat + 1 = n := by
-        rw [USize.le_iff_toNat_le, hsub] at h2; simp at h2; lia
+      have h1' : j.toNat < n := by grind
+      have hlast : j.toNat + 1 = n := by grind
       refine GemmInv.congr (gemmColTerms_inv α A B β C hs j h1' i₀ len hw l₀ l₁ hl hl₁ c hc cnt
         hinv (fun r hr₁ hr₂ => hcnt r _ hr₁ hr₂ (Nat.le_refl _) h1')) ?_
       intro r j' _ hj'
@@ -841,8 +798,7 @@ theorem gemmRowBlocks_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float
   have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
       (k + 128) * (m + 256) < USize.size := hs
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt (show m < USize.size by lia)]
+  have hmu : m.toUSize.toNat = m := by grind
   have h256 : (256 : USize).toNat = 256 := by simp
   obtain ⟨d, hd⟩ : ∃ d, m + 256 - i₀.toNat = d := ⟨_, rfl⟩
   induction d using Nat.strongRecOn generalizing i₀ c cnt with
@@ -850,11 +806,9 @@ theorem gemmRowBlocks_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float
   rw [gemmRowBlocks]
   split
   · rename_i h
-    have h' : i₀.toNat < m := by have : i₀.toNat < m.toUSize.toNat := h; lia
-    have hsub : (m.toUSize - i₀).toNat = m - i₀.toNat := by
-      rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le]; lia), hmu]
-    have hnext : (i₀ + 256).toNat = i₀.toNat + 256 := by
-      rw [USize.toNat_add_of_lt (by rw [h256]; lia), h256]
+    have h' : i₀.toNat < m := by grind
+    have hsub : (m.toUSize - i₀).toNat = m - i₀.toNat := by grind
+    have hnext : (i₀ + 256).toNat = i₀.toNat + 256 := by grind
     dsimp only
     have hlenN : (if m.toUSize - i₀ < 256 then m.toUSize - i₀ else 256).toNat =
         min (m - i₀.toNat) 256 := by
@@ -896,8 +850,7 @@ theorem gemmTermBlocks_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Floa
   have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
       (k + 128) * (m + 256) < USize.size := hs
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  have hku : k.toUSize.toNat = k := by simp [Nat.mod_eq_of_lt (show k < USize.size by lia)]
+  have hku : k.toUSize.toNat = k := by grind
   have h128 : (128 : USize).toNat = 128 := by simp
   obtain ⟨d, hd⟩ : ∃ d, k + 1 - l₀.toNat = d := ⟨_, rfl⟩
   induction d using Nat.strongRecOn generalizing l₀ c with
@@ -905,9 +858,8 @@ theorem gemmTermBlocks_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Floa
   rw [gemmTermBlocks]
   split
   · rename_i h
-    have h' : l₀.toNat < k := by have : l₀.toNat < k.toUSize.toNat := h; lia
-    have hsub : (k.toUSize - l₀).toNat = k - l₀.toNat := by
-      rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le]; lia), hku]
+    have h' : l₀.toNat < k := by grind
+    have hsub : (k.toUSize - l₀).toNat = k - l₀.toNat := by grind
     have hl₁ : (if k.toUSize - l₀ < 128 then k.toUSize else l₀ + 128).toNat =
         min k (l₀.toNat + 128) := by
       split
@@ -916,7 +868,7 @@ theorem gemmTermBlocks_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Floa
         rw [hku]; lia
       · rename_i h
         rw [USize.lt_iff_toNat_lt, hsub, h128] at h
-        rw [USize.toNat_add_of_lt (by rw [h128]; lia), h128]; lia
+        grind
     dsimp only
     have h₁ := gemmRowBlocks_inv α A B β C hs l₀
       (if k.toUSize - l₀ < 128 then k.toUSize else l₀ + 128) (by lia) (by lia) 0 (by simp)
@@ -975,9 +927,8 @@ public theorem gemmBlocked_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : F
     have hs' : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
         m + 256 < USize.size ∧ n + 2 < USize.size ∧ k + 128 < USize.size ∧
         (k + 128) * (m + 256) < USize.size := hs
-    have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-    have hmu : m.toUSize.toNat = m := by simp [Nat.mod_eq_of_lt (show m < USize.size by lia)]
-    have hnu : n.toUSize.toNat = n := by simp [Nat.mod_eq_of_lt (show n < USize.size by lia)]
+    have hmu : m.toUSize.toNat = m := by grind
+    have hnu : n.toUSize.toNat = n := by grind
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
     rw [Tail.run_forInFrom_unit (F := betaPass m β) (hF := size_betaPass m β)]
     · simp only [Tail.run_done]
