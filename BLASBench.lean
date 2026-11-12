@@ -120,6 +120,68 @@ where
       if i == 0 || a > m then loop (i + 1) i a else loop (i + 1) k m
     else k.toNat
 
+/-- The size facts that the reference `gemm` loops need, for `m × m` matrices. -/
+structure GemmSizes (m : USize) (a b c : Float64Array) : Prop where
+  ha : a.size = m.toNat * m.toNat
+  hb : b.size = a.size
+  hc : c.size = a.size
+  hs : a.size < USize.size
+
+/-- Column `j < m` of an `m × m` matrix fits in an array of `m * m` elements. -/
+theorem col_le {m j : USize} {a b c : Float64Array} (h : GemmSizes m a b c) (hj : j < m) :
+    (m * j).toNat + m.toNat ≤ a.size :=
+  BLAS.Float64.toNat_mul_add_le (n := m.toNat) (USize.lt_iff_toNat_lt.mp hj) (by rw [h.ha]; exact Nat.le_refl _) h.hs
+
+/-- The element `off + i` of a column at `off`, for `i < m`. -/
+theorem idx_lt {m off i : USize} {p : Nat} (hw : off.toNat + m.toNat ≤ p) (hi : i < m) :
+    (off + i).toNat < p :=
+  ScalarArray.InPlaceSyntax.toNat_add_lt_of_window hw (USize.lt_iff_toNat_lt.mp hi)
+
+/--
+`α * A * B + β * C` for `m × m` matrices, by the loops of the naive `gemm`: for each column `j` of
+`C`, scale it by `β`, then add `α * B[l, j]` times column `l` of `A`.
+-/
+partial def refGemm (m : USize) (α : Float) (a b : Float64Array) (β : Float) (c : Float64Array) :
+    Float64Array :=
+  if h : a.size = m.toNat * m.toNat ∧ b.size = a.size ∧ c.size = a.size ∧ a.size < USize.size then
+    (cols ⟨h.1, h.2.1, h.2.2.1, h.2.2.2⟩ ⟨c, h.2.2.1⟩ 0).1
+  else c
+where
+  /-- The columns from `j`. -/
+  cols (h : GemmSizes m a b c) (z : {z : Float64Array // z.size = a.size}) (j : USize) :
+      {z : Float64Array // z.size = a.size} :=
+    if hj : j < m then
+      have hw := col_le h hj
+      let z := scale z (m * j) (by rw [z.2]; exact hw) 0
+      cols h (terms h z j hj 0) (j + 1)
+    else z
+  /-- Scales `z[cj + i]`, for the indices from `i`. -/
+  scale (z : {z : Float64Array // z.size = a.size}) (cj : USize)
+      (hw : cj.toNat + m.toNat ≤ z.1.size) (i : USize) : {z : Float64Array // z.size = a.size} :=
+    if hi : i < m then
+      have hi := idx_lt hw hi
+      scale ⟨z.1.uset (cj + i) (β * z.1.uget (cj + i) hi) hi, by simp [z.2]⟩ cj
+        (by simpa using hw) (i + 1)
+    else z
+  /-- Adds the terms of column `j`, for the indices from `l`. -/
+  terms (h : GemmSizes m a b c) (z : {z : Float64Array // z.size = a.size}) (j : USize)
+      (hj : j < m) (l : USize) : {z : Float64Array // z.size = a.size} :=
+    if hl : l < m then
+      have hb := idx_lt (by rw [h.hb]; exact col_le h hj) hl
+      let t := α * b.uget (m * j + l) hb
+      terms h (axpyCol h z t (m * j) (by rw [z.2]; exact col_le h hj) (m * l) (col_le h hl) 0) j
+        hj (l + 1)
+    else z
+  /-- `z[cj + i] += t * a[al + i]`, for the indices from `i`. -/
+  axpyCol (h : GemmSizes m a b c) (z : {z : Float64Array // z.size = a.size}) (t : Float)
+      (cj : USize) (hw : cj.toNat + m.toNat ≤ z.1.size) (al : USize)
+      (ha : al.toNat + m.toNat ≤ a.size) (i : USize) : {z : Float64Array // z.size = a.size} :=
+    if hi : i < m then
+      have hz := idx_lt hw hi
+      axpyCol h ⟨z.1.uset (cj + i) (z.1.uget (cj + i) hz + t * a.uget (al + i) (idx_lt ha hi)) hz,
+        by simp [z.2]⟩ t cj (by simpa using hw) al ha (i + 1)
+    else z
+
 /-- The benchmarks. -/
 def rows (rounds n : Nat) : IO (List Row) := do
   let x := vec n
@@ -171,6 +233,28 @@ def rows (rounds n : Nat) : IO (List Row) := do
     ⟨"dot", dot, some dot'⟩, ⟨"asum", asum, some asum'⟩, ⟨"nrm2", nrm2, some nrm2'⟩,
     ⟨"iamax", iamax, some iamax'⟩, ⟨"iamax (increasing)", iamaxUp, some iamaxUp'⟩]
 
+/-- An `m × m` matrix computed from its indices. -/
+def mat (m s : Nat) : BLAS.Float64.Mat m m :=
+  .ofFn fun i j => ((i.val * 7 + j.val * 13 + s) % 11).toFloat - 5
+
+/-- The sizes of the `gemm` benchmarks. -/
+def gemmSizes : List Nat := [64, 256, 512, 1024]
+
+/--
+The `gemm` benchmarks for `m × m` matrices: the rows of `gemm` and `gemmBlocked`, and their
+floating-point operations. Each timed call depends on its argument, which is `m`, so that the
+compiler can't hoist it out of the timing loop.
+-/
+def gemmRows (rounds m : Nat) : IO (List Row × Nat) := do
+  let A := mat m 1
+  let B := mat m 2
+  let C := mat m 3
+  let α (q : Nat) := 1.5 + (q - m).toFloat
+  let t ← time rounds m fun q => (BLAS.Float64.Mat.gemm (α q) A B 0.5 C).data[0]!
+  let t' ← time rounds m fun q => (refGemm m.toUSize (α q) A.data B.data 0.5 C.data)[0]!
+  let tb ← time rounds m fun q => (BLAS.Float64.Mat.gemmBlocked (α q) A B 0.5 C).data[0]!
+  return ([⟨s!"gemm {m}", t, some t'⟩, ⟨s!"gemmBlocked {m}", tb, some t'⟩], 2 * m * m * m)
+
 /-- A time in milliseconds with three decimals. -/
 def fmt (t : Float) : String :=
   let s := toString ((t * 1000).round / 1000)
@@ -188,6 +272,8 @@ public def main (args : List String) : IO Unit := do
   let n := nums[0]?.getD 1_000_000
   let rounds := nums[1]?.getD 10
   let rows ← rows rounds n
+  let gemm ← gemmSizes.mapM (gemmRows rounds)
+  let rows := rows ++ (gemm.map (·.1)).flatten
   if tsv then
     for r in rows do
       IO.println s!"{r.name}\t{fmt r.time}"
@@ -200,3 +286,11 @@ public def main (args : List String) : IO Unit := do
         | some c => (fmt c, fmt (r.time / c))
         | none => ("—", "—")
       IO.println s!"| {r.name} | {fmt r.time} | {c} | {ratio} |"
+    IO.println "\n`gemm` of square matrices, in GFLOP/s.\n"
+    IO.println "| Size | gemm | gemmBlocked | Reference |"
+    IO.println "|--:|--:|--:|--:|"
+    for (rs, flops) in gemm, m in gemmSizes do
+      let g (t : Float) := fmt (flops.toFloat / (t * 1e6))
+      match rs with
+      | [r, rb] => IO.println s!"| {m} | {g r.time} | {g rb.time} | {(r.ref.map g).getD "—"} |"
+      | _ => pure ()
