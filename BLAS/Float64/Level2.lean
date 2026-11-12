@@ -50,13 +50,13 @@ public def gemvData (α : Float) (A : Mat m n) (x : Vec n) (β : Float) (y : Vec
     let al := A.ld.toUSize
     (inplace a do
       for i in 0...mu do
-        have hk : (o + c * i).toNat < a.size := y.toNat_index_lt hs.2.2 (by omega)
+        have hk : (o + c * i).toNat < a.size := y.toNat_index_lt hs.2.2 (by lia)
         a[o + c * i] := β * a[o + c * i]
       for j in 0...nu do
-        let t := α * x.uget xo xc rfl rfl hs.2.1 j (by omega)
+        let t := α * x.uget xo xc rfl rfl hs.2.1 j (by lia)
         for i in 0...mu do
-          have hk : (o + c * i).toNat < a.size := y.toNat_index_lt hs.2.2 (by omega)
-          a[o + c * i] := a[o + c * i] + t * A.uget ao al rfl rfl hs.1 i j (by omega) (by omega)).2
+          have hk : (o + c * i).toNat < a.size := y.toNat_index_lt hs.2.2 (by lia)
+          a[o + c * i] := a[o + c * i] + t * A.uget ao al rfl rfl hs.1 i j (by lia) (by lia)).2
   else mapStride y.data y.off y.inc 0 m (gemvAt α A x β)
 
 public theorem gemvData_eq (α : Float) (A : Mat m n) (x : Vec n) (β : Float) (y : Vec m) :
@@ -147,8 +147,8 @@ public def gemvTData (α : Float) (A : Mat m n) (x : Vec m) (β : Float) (y : Ve
     let al := A.ld.toUSize
     (inplace a do
       for j in 0...nu do
-        have hk : (o + c * j).toNat < a.size := y.toNat_index_lt hs.2.2 (by omega)
-        have hj : j.toNat < n := by omega
+        have hk : (o + c * j).toNat < a.size := y.toNat_index_lt hs.2.2 (by lia)
+        have hj : j.toNat < n := by lia
         a[o + c * j] := β * a[o + c * j] + α * foldUpTo m
           (fun i hi s => s + A[(i, j.toNat)] * x[i])
           (fun i hi s => s + A.uget ao al rfl rfl hs.1 i j hi hj * x.uget xo xc rfl rfl hs.2.1 i hi)
@@ -237,11 +237,11 @@ public def gerData (α : Float) (x : Vec m) (y : Vec n) (A : Mat m n) : Float64A
     let yc := y.inc.toUSize
     (inplace a do
       for j in 0...nu do
-        let t := α * y.uget yo yc rfl rfl hs.2.2 j (by omega)
+        let t := α * y.uget yo yc rfl rfl hs.2.2 j (by lia)
         let cj := ao + al * j
         for i in 0...mu do
-          have hk : (cj + 1 * i).toNat < a.size := A.toNat_col_index_lt hs.1 (by omega) (by omega)
-          a[cj + 1 * i] := a[cj + 1 * i] + x.uget xo xc rfl rfl hs.2.1 i (by omega) * t).2
+          have hk : (cj + 1 * i).toNat < a.size := A.toNat_col_index_lt hs.1 (by lia) (by lia)
+          a[cj + 1 * i] := a[cj + 1 * i] + x.uget xo xc rfl rfl hs.2.1 i (by lia) * t).2
   else mapMat A.data A.off A.ld m 0 n (gerAt α x y)
 
 public theorem gerData_eq (α : Float) (x : Vec m) (y : Vec n) (A : Mat m n) :
@@ -260,7 +260,7 @@ public theorem gerData_eq (α : Float) (x : Vec m) (y : Vec n) (A : Mat m n) :
       rw [hnu] at hj
       rw [run_forInFrom_stride (G := fun i v => gerAt α x y i j.toNat v)
         (OFF := A.off + A.ld * j.toNat) (INC := 1) (hinc := Or.inl Nat.one_pos)
-        (hix := fun i hi => A.toNat_col_index hs.1 (by omega) hj)]
+        (hix := fun i hi => A.toNat_col_index hs.1 (by lia) hj)]
       · simp only [USize.toNat_zero, hmu]
       · intro i hi v
         rw [hmu] at hi

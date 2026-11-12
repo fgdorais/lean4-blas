@@ -46,7 +46,7 @@ public theorem getElem_of_data_eq_mapStride {v w : Vec n} (g : Nat → Float →
 /-- The number of elements `n` as a `USize`, in a vector whose array has a `USize` size. -/
 public theorem toNat_toUSize (x : Vec n) (hs : x.data.size < USize.size) : n.toUSize.toNat = n := by
   have := x.le_size
-  simp [Nat.mod_eq_of_lt (show n < USize.size by omega)]
+  simp [Nat.mod_eq_of_lt (show n < USize.size by lia)]
 
 /-- The loop of a vector update from the step `0`: its indices are distinct and don't wrap. -/
 public theorem loop_facts (x : Vec n) (hs : x.data.size < USize.size) :
@@ -68,8 +68,8 @@ public def axpyData (α : Float) (x y : Vec n) : Float64Array :=
     let xc := x.inc.toUSize
     (inplace a do
       for k in 0...nu do
-        have hk : (o + c * k).toNat < a.size := y.toNat_index_lt hs.2 (by omega)
-        a[o + c * k] := α * x.uget xo xc rfl rfl hs.1 k (by omega) + a[o + c * k]).2
+        have hk : (o + c * k).toNat < a.size := y.toNat_index_lt hs.2 (by lia)
+        a[o + c * k] := α * x.uget xo xc rfl rfl hs.1 k (by lia) + a[o + c * k]).2
   else mapStride y.data y.off y.inc 0 n fun i v => α * x.data[x.off + x.inc * i]! + v
 
 public theorem axpyData_eq (α : Float) (x y : Vec n) :
@@ -126,7 +126,7 @@ public def scalData (α : Float) (x : Vec n) : Float64Array :=
     let c := x.inc.toUSize
     (inplace a do
       for k in 0...nu do
-        have hk : (o + c * k).toNat < a.size := x.toNat_index_lt hs (by omega)
+        have hk : (o + c * k).toNat < a.size := x.toNat_index_lt hs (by lia)
         a[o + c * k] := α * a[o + c * k]).2
   else mapStride x.data x.off x.inc 0 n fun _ v => α * v
 
@@ -182,8 +182,8 @@ public def copyData (x y : Vec n) : Float64Array :=
     let xc := x.inc.toUSize
     (inplace a do
       for k in 0...nu do
-        have hk : (o + c * k).toNat < a.size := y.toNat_index_lt hs.2 (by omega)
-        a[o + c * k] := x.uget xo xc rfl rfl hs.1 k (by omega)).2
+        have hk : (o + c * k).toNat < a.size := y.toNat_index_lt hs.2 (by lia)
+        a[o + c * k] := x.uget xo xc rfl rfl hs.1 k (by lia)).2
   else mapStride y.data y.off y.inc 0 n fun i _ => x.data[x.off + x.inc * i]!
 
 public theorem copyData_eq (x y : Vec n) :
@@ -195,8 +195,8 @@ public theorem copyData_eq (x y : Vec n) :
     have hw : ∀ v : Vec n, v.inc = 1 → n = 0 ∨ v.off + n ≤ v.data.size := by
       intro v h
       rcases Nat.eq_zero_or_pos n with h' | h'
-      · omega
-      · have := v.index_lt (i := n - 1) (by omega); simp [h] at this; omega
+      · lia
+      · have := v.index_lt (i := n - 1) (by lia); simp [h] at this; lia
     rw [copySlice_eq_mapStride _ _ _ _ _ (hw x hc.1) (hw y hc.2), hc.1, hc.2]
     simp
   split
@@ -320,41 +320,41 @@ decreasing_by
     rw [USize.lt_iff_toNat_lt] at hi
     have : m.toNat < USize.size := m.toNat_lt_size
     have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-    rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by omega)]
-    omega
+    rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]
+    lia
 
 private theorem iamaxLoop_eq (x : Vec n) (o c : USize) (ho : x.off.toUSize = o)
     (hc : x.inc.toUSize = c) (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float)
     (j : Nat) (hj : i.toNat = j) (hjn : j ≤ n)
-    (hacc : Nat.fold j (fun l hl => iamaxStep x l (by omega)) (0, 0) = (k.toNat, a)) :
+    (hacc : Nat.fold j (fun l hl => iamaxStep x l (by lia)) (0, 0) = (k.toNat, a)) :
     iamaxLoop x o c ho hc hs m hm i k a = (Nat.fold n (iamaxStep x) (0, 0)).1 := by
   obtain ⟨d, hd⟩ : ∃ d, n - j = d := ⟨_, rfl⟩
   induction d generalizing i k a j with
   | zero =>
-    rw [iamaxLoop, dite_eq_right_of_eq_false (eq_false (by rw [USize.lt_iff_toNat_lt]; omega))]
-    obtain rfl : j = n := by omega
+    rw [iamaxLoop, dite_eq_right_of_eq_false (eq_false (by rw [USize.lt_iff_toNat_lt]; lia))]
+    obtain rfl : j = n := by lia
     rw [hacc]
   | succ d ih =>
-    have hi : i < m := by rw [USize.lt_iff_toNat_lt]; omega
+    have hi : i < m := by rw [USize.lt_iff_toNat_lt]; lia
     have hsucc : (i + 1).toNat = j + 1 := by
       have : m.toNat < USize.size := m.toNat_lt_size
       have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
       rw [USize.lt_iff_toNat_lt] at hi
-      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by omega), hj]
-    have hstep : Nat.fold (j + 1) (fun l hl => iamaxStep x l (by omega)) (0, 0) =
-        iamaxStep x j (by omega) (k.toNat, a) := by
+      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia), hj]
+    have hstep : Nat.fold (j + 1) (fun l hl => iamaxStep x l (by lia)) (0, 0) =
+        iamaxStep x j (by lia) (k.toNat, a) := by
       rw [Nat.fold_succ, hacc]
     rw [iamaxLoop, dite_eq_left_of_eq_true (eq_true hi)]
     simp only [uget_eq_getElem]
     subst hj
     split
     next hc =>
-      refine ih (i + 1) i _ (i.toNat + 1) hsucc (by omega) ?_ (by omega)
+      refine ih (i + 1) i _ (i.toNat + 1) hsucc (by lia) ?_ (by lia)
       have hc' : i.toNat = 0 ∨ x[i.toNat].abs > a := by simpa [← USize.toNat_inj] using hc
       rw [hstep]
       simp only [iamaxStep, hc', ite_true]
     next hc =>
-      refine ih (i + 1) k a (i.toNat + 1) hsucc (by omega) ?_ (by omega)
+      refine ih (i + 1) k a (i.toNat + 1) hsucc (by lia) ?_ (by lia)
       have hc' : ¬(i.toNat = 0 ∨ x[i.toNat].abs > a) := by simpa [← USize.toNat_inj] using hc
       rw [hstep]
       simp only [iamaxStep, hc', ite_false]
@@ -370,7 +370,7 @@ public def iamax (x : Vec n) : Nat :=
 public theorem iamax_eq (x : Vec n) : iamax x = (Nat.fold n (iamaxStep x) (0, 0)).1 := by
   unfold iamax
   split
-  · exact iamaxLoop_eq x _ _ rfl rfl _ _ _ 0 0 0 0 (by simp) (by omega) (by simp)
+  · exact iamaxLoop_eq x _ _ rfl rfl _ _ _ 0 0 0 0 (by simp) (by lia) (by simp)
   · rfl
 
 end Vec
