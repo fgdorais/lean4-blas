@@ -165,7 +165,7 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
     have hB := B.size_data
     have hC := C.size_data
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [run_forInFrom_iter (F := gemmCol m k α A.data B.data β) (hF := size_gemmCol m k α A.data B.data β)]
+    rw [Tail.run_forInFrom_unit (F := gemmCol m k α A.data B.data β) (hF := size_gemmCol m k α A.data B.data β)]
     · have hcol := size_gemmCol m k α A.data B.data β
       simp only [Tail.run_done]
       apply ext
@@ -192,9 +192,9 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
         · rw [getElem!_neg c _ hc, getElem!_neg _ _ (by rw [size_gemmCol]; exact hc)]
     · intro j _ hj next a h
       rw [hnu] at hj
-      rw [run_forInFrom_iter (F := fun i c => c.set! (m * j.toNat + i) (β * c[m * j.toNat + i]!))
+      rw [Tail.run_forInFrom_unit (F := fun i c => c.set! (m * j.toNat + i) (β * c[m * j.toNat + i]!))
           (hF := by simp)]
-      · rw [run_forInFrom_iter (F := fun l c => iterRange (fun i c =>
+      · rw [Tail.run_forInFrom_unit (F := fun l c => iterRange (fun i c =>
             c.set! (m * j.toNat + i)
               (c[m * j.toNat + i]! + α * B.data[k * j.toNat + l]! * A.data[m * l + i]!)) 0 m c)
             (hF := by simp [size_iterRange])]
@@ -202,7 +202,7 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
           simp [gemmCol, hmu, hku]
         · intro l _ hl next' a' h'
           rw [hku] at hl
-          rw [run_forInFrom_iter (F := fun i c => c.set! (m * j.toNat + i)
+          rw [Tail.run_forInFrom_unit (F := fun i c => c.set! (m * j.toNat + i)
               (c[m * j.toNat + i]! + α * B.data[k * j.toNat + l.toNat]! * A.data[m * l.toNat + i]!))
               (hF := by simp)]
           · simp [hmu]
