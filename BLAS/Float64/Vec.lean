@@ -5,6 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import ScalarArray
+import all BLAS.Internal
 
 /-!
 # Vectors
@@ -19,29 +20,6 @@ unchanged.
 open ScalarArray
 
 namespace BLAS.Float64
-
-/-- `(j + 1 + k).toNat = j.toNat + 1 + k.toNat` when the result doesn't wrap around. -/
-public theorem USize.toNat_succ_add {j k : USize} (h : j.toNat + 1 + k.toNat < USize.size) :
-    (j + 1 + k).toNat = j.toNat + 1 + k.toNat := by
-  have : USize.size = 2 ^ System.Platform.numBits := USize.size_eq_two_pow
-  rw [USize.toNat_add, USize.toNat_add, USize.toNat_one,
-    Nat.mod_eq_of_lt (a := j.toNat + 1) (by lia), Nat.mod_eq_of_lt (by lia)]
-
-/-- `(n - j - 1).toNat = n.toNat - j.toNat - 1` for `j < n`: the length of the rest after `j`. -/
-public theorem USize.toNat_sub_sub_one {n j : USize} (h : j.toNat < n.toNat) :
-    (n - j - 1).toNat = n.toNat - j.toNat - 1 := by
-  have h₁ : j ≤ n := USize.le_iff_toNat_le.2 (by lia)
-  rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 ?_), USize.toNat_sub_of_le _ _ h₁,
-    USize.toNat_one]
-  rw [USize.toNat_sub_of_le _ _ h₁, USize.toNat_one]; lia
-
-/-- `(n - 1 - k).toNat = n.toNat - 1 - k.toNat` for `k < n`: the index of the step `k` down. -/
-public theorem USize.toNat_sub_one_sub {n k : USize} (h : k.toNat < n.toNat) :
-    (n - 1 - k).toNat = n.toNat - 1 - k.toNat := by
-  have h₁ : 1 ≤ n := USize.le_iff_toNat_le.2 (by rw [USize.toNat_one]; lia)
-  rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.2 ?_), USize.toNat_sub_of_le _ _ h₁,
-    USize.toNat_one]
-  rw [USize.toNat_sub_of_le _ _ h₁, USize.toNat_one]; lia
 
 /--
 A vector of `n` floats, stored in a `Float64Array` from the index `off`, with the stride `inc`.

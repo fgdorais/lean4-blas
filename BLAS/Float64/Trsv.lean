@@ -6,6 +6,7 @@ module
 
 public import BLAS.Float64.Level1
 public import BLAS.Float64.Mat
+import all BLAS.Internal
 
 /-!
 # Triangular solve
