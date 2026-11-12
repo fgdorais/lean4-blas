@@ -5,6 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import BLAS.Float64.Level3
+import all BLAS.Internal
 
 /-!
 # Blocked `gemm`
@@ -22,32 +23,6 @@ loops into jumps.
 open ScalarArray Float64Array InPlace
 
 namespace BLAS.Float64
-
-/-- `(x * y + z).toNat = x.toNat * y.toNat + z.toNat` when it doesn't wrap around. -/
-public theorem USize.toNat_mul_add_of_lt {x y z : USize} {X : Nat} (hx : x.toNat = X)
-    (h : X * y.toNat + z.toNat < USize.size) : (x * y + z).toNat = X * y.toNat + z.toNat := by
-  have hxy : (x * y).toNat = X * y.toNat := by
-    rw [USize.toNat_mul_of_lt (by rw [hx]; lia), hx]
-  rw [USize.toNat_add_of_lt (by rw [hxy]; lia), hxy]
-
-/--
-The window of `len` elements at `x * y + z` fits in an `X × Y` matrix, for `y < Y` and
-`z + len ≤ X`.
--/
-public theorem toNat_mul_add_add_le {x y z len : USize} {X Y : Nat} (hx : x.toNat = X)
-    (hy : y.toNat < Y) (hz : z.toNat + len.toNat ≤ X) (hs : X * Y < USize.size) :
-    (x * y + z).toNat + len.toNat ≤ X * Y := by
-  have h1 : X * (y.toNat + 1) ≤ X * Y := Nat.mul_le_mul_left _ hy
-  rw [Nat.mul_succ] at h1
-  rw [USize.toNat_mul_add_of_lt hx (by lia)]
-  lia
-
-/-- `(x * y + z).toNat` for an element `z ≤ X` of the column `y < Y` of an `X × Y` matrix. -/
-public theorem toNat_mul_add_eq {x y z : USize} {X Y : Nat} (hx : x.toNat = X) (hy : y.toNat < Y)
-    (hz : z.toNat ≤ X) (hs : X * Y < USize.size) : (x * y + z).toNat = X * y.toNat + z.toNat :=
-  USize.toNat_mul_add_of_lt hx (by
-    have h1 : X * (y.toNat + 1) ≤ X * Y := Nat.mul_le_mul_left _ hy
-    rw [Nat.mul_succ] at h1; lia)
 
 /-! ## Sweeps over the rows -/
 
