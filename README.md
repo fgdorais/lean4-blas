@@ -74,8 +74,9 @@ Both run their kernels on packed matrices, `PMat m n`. A packed `Mat` goes to th
 and a packed `C` is updated in place. Any other matrix is packed into a copy first, one `memmove`
 per column, and the columns of the result are copied back into `C`'s array.
 
-The Level 2 routines run the loops of the reference BLAS directly on any `Mat` and `Vec`, with no
-packing, and their specifications are exact in the same way:
+The Level 2 routines run directly on any `Mat` and `Vec`, with no packing. Each element gets the
+operations of the reference BLAS in its order, although `gemv` and `gemvT` handle four columns of
+`A` per loop, and their specifications are exact in the same way:
 
 | Routine | Result | Specification |
 |---|---|---|
@@ -94,6 +95,35 @@ y[i] = d.apply (Nat.fold i (fun l _ s => s - y[l] * A[(i, l)]) x[i]) A[(i, i)]
 
 where `d.apply v a` is `v / a`, or `v` for a unit diagonal. For the upper triangle, the terms run
 from `l = n - 1` down to `i + 1`.
+
+## Conformance
+
+The target is the behavior of the reference BLAS, as in the current `master` branch of
+[Reference-LAPACK](https://github.com/Reference-LAPACK/lapack), rather than its last release. Each
+routine computes every element with the operations of the reference implementation, in the same
+order, so that the result is exact to the bit, and its specification says so. Where a routine still
+differs from the reference BLAS, such as the unscaled `nrm2` above, its documentation says how.
+
+## Performance
+
+Speed comes second to proofs, and it is measured rather than promised. On the machines measured
+so far, the routines match the reference BLAS on Level 1 and surpass it on Level 2, and `gemm` is
+several times faster. Against OpenBLAS on one thread, we don't expect any routine to be more than about 5 times
+slower: the memory-bound Level 1 routines and `gemv` are close to it, and `gemm` is the furthest
+behind. OpenBLAS runs on several threads by default, and this library runs on one, so on a
+multi-core machine the gap is larger. `scripts/blas_compare.py`, below, measures both comparisons.
+
+### Compiler options
+
+The library is compiled with Lean's default C compiler options, which target the baseline
+instruction set of the platform, so that its binaries run on any machine of that architecture.
+They include `-ffp-contract=off`, which keeps the C compiler from fusing a multiplication and an
+addition into one rounding: the specifications depend on it. Never compile the library with
+`-ffast-math`, `-ffp-contract=fast` or similar options, which change the results.
+
+The lakefile adds `-falign-loops=64`, so that a loop's speed doesn't depend on where unrelated code
+moves it. Adding `-march=native` to `moreLeancArgs` in `lakefile.toml` gives a modest speedup on
+Level 2 and `gemm`, but the binaries then only run on CPUs like the one that built them.
 
 ## Installation
 
