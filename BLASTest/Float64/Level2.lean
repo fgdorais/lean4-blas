@@ -62,12 +62,16 @@ goes on to a routine, and doesn't keep the array alive past it.
 /-- The spec of `gemv`, on lists. -/
 def gemvList (α : Float) (A : Mat m n) (x : Vec n) (β : Float) (y : Vec m) : List Float :=
   List.ofFn fun i : Fin m =>
-    (List.finRange n).foldl (fun s j => s + α * x[j.val] * A[(i.val, j.val)]) (β * y[i.val])
+    let v := if β == 0 then 0 else β * y[i.val]
+    if n = 0 then y[i.val] else if α == 0 then v
+    else (List.finRange n).foldl (fun s j => s + α * x[j.val] * A[(i.val, j.val)]) v
 
 /-- The spec of `gemvT`, on lists. -/
 def gemvTList (α : Float) (A : Mat m n) (x : Vec m) (β : Float) (y : Vec n) : List Float :=
   List.ofFn fun j : Fin n =>
-    β * y[j.val] + α * (List.finRange m).foldl (fun s i => s + A[(i.val, j.val)] * x[i.val]) 0
+    let v := if β == 0 then 0 else β * y[j.val]
+    if m = 0 then y[j.val] else if α == 0 then v
+    else v + α * (List.finRange m).foldl (fun s i => s + A[(i.val, j.val)] * x[i.val]) 0
 
 /--
 Whether `gemv` and `gemvT` match their specs, on packed operands and on operands with offsets,
@@ -93,8 +97,23 @@ def gemvMatches (m n : Nat) (α β : Float) : Bool :=
 #guard gemvMatches 0 3 1 1
 #guard gemvMatches 3 0 1 2
 
--- Unlike the reference BLAS, `β = 0` keeps a `NaN` of `y`.
-#guard (Mat.gemv 1 (mat 1 1) (vec 1) 0 (.ofList [0 / 0])).toList.all (·.isNaN)
+#guard gemvMatches 5 4 0 0.5
+#guard gemvMatches 5 4 1.5 0
+#guard gemvMatches 5 4 0 0
+#guard gemvMatches 0 3 1 0
+#guard gemvMatches 3 0 1 0
+
+-- As in the reference BLAS, `β = 0` sets `y` to `0` without reading it, so a `NaN` in `y` goes.
+#guard (Mat.gemv 1 (mat 1 1) (vec 1) 0 (.ofList [0 / 0])).toList == [(mat 1 1)[(0, 0)] * (vec 1)[0]]
+#guard (Mat.gemvT 1 (mat 1 1) (vec 1) 0 (.ofList [0 / 0])).toList == [(mat 1 1)[(0, 0)] * (vec 1)[0]]
+
+-- `α = 0` only scales `y`, without reading `A` or `x`.
+#guard (Mat.gemv (m := 1) (n := 1) 0 (.ofFn fun _ _ => 0 / 0) (.ofList [1 / 0]) 2 (.ofList [3])).toList == [6]
+#guard (Mat.gemvT (m := 1) (n := 1) 0 (.ofFn fun _ _ => 0 / 0) (.ofList [1 / 0]) 2 (.ofList [3])).toList == [6]
+
+-- An empty sum returns `y`, unscaled.
+#guard (Mat.gemv (m := 2) (n := 0) 1 (.ofFn fun _ _ => 0) (.ofList []) 2 (.ofList [1, 0 / 0])).toList.head? == some 1
+#guard (Mat.gemvT (m := 0) (n := 2) 1 (.ofFn fun _ _ => 0) (.ofList []) 2 (.ofList [1, 3])).toList == [1, 3]
 
 /-- Whether `gemv` and `gemvT` update an unshared `y` in place. -/
 def gemvInPlace (m : Nat) : Bool :=
@@ -116,7 +135,8 @@ def gemvInPlace (m : Nat) : Bool :=
 /-- The spec of `ger`, on lists. -/
 def gerList (α : Float) (x : Vec m) (y : Vec n) (A : Mat m n) : List Float :=
   (List.ofFn fun j : Fin n => List.ofFn fun i : Fin m =>
-    A[(i.val, j.val)] + x[i.val] * (α * y[j.val])).flatten
+    if α == 0 || y[j.val] == 0 then A[(i.val, j.val)]
+    else A[(i.val, j.val)] + x[i.val] * (α * y[j.val])).flatten
 
 /-- Whether `ger` matches its spec, and leaves the rest of `A`'s array unchanged. -/
 def gerMatches (m n : Nat) (α : Float) : Bool :=
@@ -131,6 +151,14 @@ def gerMatches (m n : Nat) (α : Float) : Bool :=
 #guard gerMatches 300 70 (-0.75)
 #guard gerMatches 0 3 1
 #guard gerMatches 3 0 1
+#guard gerMatches 5 4 0
+
+-- As in the reference BLAS, `α = 0` returns `A`, and a column with `y[j] = 0` is skipped, so an
+-- infinity in `x` doesn't reach it.
+#guard (Mat.ger (m := 2) (n := 2) 0 (.ofList [1 / 0, 1]) (.ofList [1, 1]) (.ofFn fun _ _ => 1)).toList ==
+  [1, 1, 1, 1]
+#guard (Mat.ger (m := 2) (n := 2) 1 (.ofList [1 / 0, 1]) (.ofList [0, 1]) (.ofFn fun _ _ => 1)).toList ==
+  [1, 1, 1 / 0, 2]
 
 /-- Whether `ger` updates an unshared `A` in place. -/
 def gerInPlace (m : Nat) : Bool :=

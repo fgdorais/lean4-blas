@@ -240,6 +240,31 @@ public theorem mapMat_congr (a : Float64Array) (off ld m lo hi : Nat) {g g' : Na
   · rename_i hc; exact h _ _ _ hc.2.1 hc.2.2.1 hc.2.2.2
   · rfl
 
+/-- `mapMat` depends only on the values of its function at the elements of the matrix. -/
+public theorem mapMat_congr_getElem (a : Float64Array) (off ld m lo hi : Nat)
+    {g g' : Nat → Nat → Float → Float}
+    (h : ∀ i j, i < m → lo ≤ j → j < hi → (hq : off + ld * j + i < a.size) →
+      g i j a[off + ld * j + i] = g' i j a[off + ld * j + i]) :
+    mapMat a off ld m lo hi g = mapMat a off ld m lo hi g' := by
+  apply ext_getElem (by simp)
+  intro p hp _
+  simp only [mapMat, Float64Array.getElem_ofFn]
+  split
+  · rename_i hc
+    have e := eq_mat_index (ld := ld) hc.1
+    have := h _ _ hc.2.1 hc.2.2.1 hc.2.2.2 (by rw [← e]; simpa using hp)
+    simp only [← e] at this
+    exact this
+  · rfl
+
+/-- `mapMat` by the identity leaves the array unchanged. -/
+public theorem mapMat_id (a : Float64Array) (off ld m lo hi : Nat) :
+    mapMat a off ld m lo hi (fun _ _ v => v) = a := by
+  apply ext_getElem (by simp)
+  intro p _ _
+  simp only [mapMat, Float64Array.getElem_ofFn]
+  split <;> rfl
+
 namespace Mat
 
 variable {m n : Nat}

@@ -22,6 +22,14 @@ open ScalarArray Float64Array InPlace
 
 namespace BLAS.Float64
 
+/-! ## Scaling by `β` -/
+
+/--
+`β * v`, or `0` when `β = 0`, without reading `v`: the reference BLAS scales `y` or `C` by `β` this
+way in `gemv` and `gemm`, so that a `NaN` or an infinity in them doesn't survive `β = 0`.
+-/
+@[inline, expose] public def betaMul (β v : Float) : Float := if β == 0 then 0 else β * v
+
 /-! ## Reductions -/
 
 /--

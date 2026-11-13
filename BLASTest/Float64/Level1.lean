@@ -41,6 +41,11 @@ goes on to a routine, and doesn't keep the array alive past it.
   | [a, b, c] => a == inf && b.isNaN && c.isNaN
   | _ => false
 
+-- As in the reference BLAS, `α = 0` returns `y` without reading `x`.
+#guard
+  let inf : Float := 1 / 0
+  (Vec.axpy 0 (.ofList (n := 2) [inf, 0 / 0]) (.ofList (n := 2) [1, 2])).toList == [1, 2]
+
 /-- Whether `axpy` updates an unshared `y` in place. -/
 def axpyInPlace (n : Nat) : Bool :=
   let (p, y) := withAddr (ramp n)
@@ -106,6 +111,20 @@ def copyInPlace (n : Nat) : Bool :=
 #guard Vec.nrm2 (.ofList (n := 2) [3, -4]) == 5
 #guard Vec.nrm2 (ramp 0) == 0
 
+-- `nrm2` scales big and small elements, so it overflows or underflows only when the norm does.
+#guard Vec.nrm2 (.ofList (n := 2) [Float.scaleB 3 600, Float.scaleB (-4) 600]) == Float.scaleB 5 600
+#guard Vec.nrm2 (.ofList (n := 2) [Float.scaleB 3 (-600), Float.scaleB 4 (-600)]) ==
+  Float.scaleB 5 (-600)
+#guard Vec.nrm2 (.ofList (n := 3) [Float.scaleB 3 1020, Float.scaleB 4 1020, 1]) ==
+  Float.scaleB 5 1020
+#guard Vec.nrm2 (.ofList (n := 3) [Float.scaleB 3 (-1060), Float.scaleB 4 (-1060), 0]) ==
+  Float.scaleB 5 (-1060)
+#guard Vec.nrm2 (.ofList (n := 2) [1e-300, 1]) == 1
+#guard Vec.nrm2 (.ofList (n := 2) [1e300, 1e300]) < 1 / 0
+#guard Vec.nrm2 (.ofList (n := 2) [1, 1 / 0]) == 1 / 0
+#guard (Vec.nrm2 (.ofList (n := 3) [1, 0 / 0, 1 / 0])).isNaN
+#guard (Vec.nrm2 (.ofList (n := 2) [1e-300, 0 / 0])).isNaN
+
 -- The sums run from the left, in the order of the spec.
 #guard
   let n := 70000
@@ -119,7 +138,9 @@ def copyInPlace (n : Nat) : Bool :=
 #guard Vec.iamax (ramp 0) == 0
 #guard Vec.iamax (ramp 70000) == 69999
 #guard Vec.iamax (.ofList (n := 3) [0 / 0, 5, 7]) == 0
-#guard Vec.iamax (.ofList (n := 3) [1, 0 / 0, 7]) == 2
+-- As in the reference BLAS (after LAPACK 3.12.1), the first `NaN` wins.
+#guard Vec.iamax (.ofList (n := 3) [1, 0 / 0, 7]) == 1
+#guard Vec.iamax (.ofList (n := 4) [1, 9, 0 / 0, 0 / 0]) == 2
 #guard Vec.iamax (.ofList (n := 3) [1, -1 / 0, 7]) == 1
 
 /-! ## Strided vectors -/
