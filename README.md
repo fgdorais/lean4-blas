@@ -121,6 +121,19 @@ its Lean model.
 but CI doesn't run it. To run it on GitHub, add the `benchmark` label to a pull request, which
 compares the pull request with its base, or start the Benchmarks workflow from the Actions tab.
 
+To compare with a C BLAS, such as OpenBLAS or Netlib's reference BLAS, build
+`scripts/cblas_bench.c`, which runs the same benchmarks through the CBLAS interface of a shared
+library that it loads at run time, and pass both outputs to `scripts/blas_compare.py`:
+
+```
+cc -O2 -o cblas_bench scripts/cblas_bench.c -ldl
+lake exe bench --tsv > lean.tsv
+OPENBLAS_NUM_THREADS=1 ./cblas_bench /usr/lib/x86_64-linux-gnu/libopenblas.so.0 > openblas.tsv
+python3 scripts/blas_compare.py lean.tsv OpenBLAS=openblas.tsv
+```
+
+This is only a script: the library itself has no C dependency.
+
 You can generate the documentation locally with `lake build BLAS:docs` in the `docs` directory.
 
 -----
