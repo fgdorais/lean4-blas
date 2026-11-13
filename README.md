@@ -6,8 +6,10 @@ Basic Linear Algebra Subprograms written entirely in Lean 4, on the unboxed arra
 [lean4-scalar-arrays](https://github.com/fgdorais/lean4-scalar-arrays), with no C code of its own.
 The routines come with proved specifications; their speed is measured, not promised.
 
-The library is at an early stage. It has, on `Float64`, the BLAS Level 1 routines on strided vectors,
-and `gemv`, `ger`, `trsv` and `gemm` on matrices with an offset and a leading dimension.
+The library is at an early stage. It has, on `Float64` and `Float32`, the BLAS Level 1 routines on
+strided vectors, and `gemv`, `ger`, `trsv` and `gemm` on matrices with an offset and a leading
+dimension. The `Float32` routines are in `BLAS.Float32`, with the same names and specifications as
+those of `BLAS.Float64`, on `Float32Array`.
 
 ## Usage
 
@@ -120,6 +122,20 @@ its Lean model.
 `USize` loop where there is one. `lake build` compiles it so that it keeps up with the API,
 but CI doesn't run it. To run it on GitHub, add the `benchmark` label to a pull request, which
 compares the pull request with its base, or start the Benchmarks workflow from the Actions tab.
+
+The `Float32` sources and tests, in `BLAS/Float32/` and `BLASTest/Float32/`, are generated from
+the `Float64` versions. Make changes in `BLAS/Float64/` and `BLASTest/Float64/`, then regenerate
+the `Float32` files:
+
+```bash
+python3 scripts/generate.py
+```
+
+Text that depends on the precision, such as the constants of `nrm2` and test tolerances, is
+translated by a table in the script, which fails if such text is left over.
+`python3 scripts/generate.py --check` changes nothing and fails if a generated file is out of date;
+CI runs it. The generated files are marked `linguist-generated` in `.gitattributes`, so GitHub
+collapses them in diffs.
 
 You can generate the documentation locally with `lake build BLAS:docs` in the `docs` directory.
 
