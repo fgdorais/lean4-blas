@@ -393,7 +393,7 @@ public def gemmBlocked (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
         have hcj : cj.toNat + mu.toNat ≤ c.size :=
           toNat_mul_add_le (n := n) (by lia) (by rw [hmu, hc]; exact Nat.le_refl _)
         for i in 0...mu do
-          c[cj + i] := β * c[cj + i]
+          c[cj + i] := betaMul β c[cj + i]
     then fun _ c' h =>
       let c'' := gemmTermBlocks α A B hs 0 (by simp) c' (by rw [h, hc])
       ⟨c''.1, c''.2⟩
@@ -410,7 +410,7 @@ variable {m n k : Nat}
 /-- The element `(i, j)` of `gemm α A B β C` after its first `L` terms. -/
 def gemmPartial (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (i j L : Nat) : Float :=
-  Nat.fold L (fun l _ s => s + α * B.data[l + k * j]! * A.data[i + m * l]!) (β * C.data[i + m * j]!)
+  Nat.fold L (fun l _ s => s + α * B.data[l + k * j]! * A.data[i + m * l]!) (betaMul β C.data[i + m * j]!)
 
 theorem gemmPartial_succ (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (i j L : Nat) : gemmPartial α A B β C i j (L + 1) =
@@ -884,14 +884,14 @@ theorem gemmTermBlocks_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Floa
 
 /-- The scaling pass of `gemmBlocked`, column by column. -/
 def betaPass (m : Nat) (β : Float) (j : Nat) (c : Float64Array) : Float64Array :=
-  iterRange (fun i c => c.set! (m * j + i) (β * c[m * j + i]!)) 0 m c
+  iterRange (fun i c => c.set! (m * j + i) (betaMul β c[m * j + i]!)) 0 m c
 
 theorem size_betaPass (m β j) (c : Float64Array) : (betaPass m β j c).size = c.size :=
   size_iterRange _ (by simp) _ _ _
 
 theorem getElem!_betaPass (m β j) (c : Float64Array) (q : Nat) (hq : q < c.size) :
-    (betaPass m β j c)[q]! = if m * j ≤ q ∧ q < m * j + m then β * c[q]! else c[q]! := by
-  have := getElem!_iterRange_set! (m * j) (fun _ x => β * x) 0 m c q hq
+    (betaPass m β j c)[q]! = if m * j ≤ q ∧ q < m * j + m then betaMul β c[q]! else c[q]! := by
+  have := getElem!_iterRange_set! (m * j) (fun _ x => betaMul β x) 0 m c q hq
   simpa [betaPass] using this
 
 theorem GemmInv.betaPass (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) :
@@ -943,7 +943,7 @@ public theorem gemmBlocked_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : F
       rfl
     · intro j _ hj next a h
       rw [hnu] at hj
-      rw [Tail.run_forInFrom_unit (F := fun i c => c.set! (m * j.toNat + i) (β * c[m * j.toNat + i]!))
+      rw [Tail.run_forInFrom_unit (F := fun i c => c.set! (m * j.toNat + i) (betaMul β c[m * j.toNat + i]!))
           (hF := by simp)]
       · simp only [USize.toNat_zero, hmu, betaPass]
       · intro i _ hi next' a' h'
