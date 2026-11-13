@@ -19,8 +19,6 @@ jobs:
           # Temporarily disabled: only the Ubuntu runners for now.
           # - name: macOS arm64
           #   os: macos-latest
-          # - name: macOS x86_64
-          #   os: macos-15-intel
           # - name: Windows x86_64
           #   os: windows-latest
     runs-on: ${{ matrix.os }}
