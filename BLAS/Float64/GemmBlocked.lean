@@ -97,14 +97,14 @@ theorem getElem!_sweep4 (a c : Float64Array) (cj cj' a₀ a₁ a₂ a₃ len hc 
     simp only [Nat.add_zero]
   · intro i _ hi next c₁ h₁'
     simp only [Tail.run_readThen, Tail.run_writeThen]
-    apply Tail.run_congr
+    apply run_congr
     have hi' : i.toNat < len.toNat := by simpa using hi
     have e : ∀ {x : USize}, x.toNat + len.toNat ≤ c.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
     have ea : ∀ {x : USize}, x.toNat + len.toNat ≤ a.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
     simp only [Float64Array.uget_eq_getElem, e hc, e hc', ea h₀, ea h₁, ea h₂, ea h₃,
-      Float64Array.set_eq_set!, Float64Array.getElem_eq_getElem!]
+      set_eq_set!, getElem_eq_getElem!]
     rw [getElem!_set!_of_lt _ _ _ (by lia), ite_eq_right (by lia)]
 
 theorem getElem!_sweep2 (a c : Float64Array) (cj cj' al len hc hc' ha) (t s : Float)
@@ -127,14 +127,14 @@ theorem getElem!_sweep2 (a c : Float64Array) (cj cj' al len hc hc' ha) (t s : Fl
     simp only [Nat.add_zero]
   · intro i _ hi next c₁ h₁'
     simp only [Tail.run_readThen, Tail.run_writeThen]
-    apply Tail.run_congr
+    apply run_congr
     have hi' : i.toNat < len.toNat := by simpa using hi
     have e : ∀ {x : USize}, x.toNat + len.toNat ≤ c.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
     have ea : ∀ {x : USize}, x.toNat + len.toNat ≤ a.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
-    simp only [Float64Array.uget_eq_getElem, e hc, e hc', ea ha, Float64Array.set_eq_set!,
-      Float64Array.getElem_eq_getElem!]
+    simp only [Float64Array.uget_eq_getElem, e hc, e hc', ea ha, set_eq_set!,
+      getElem_eq_getElem!]
     rw [getElem!_set!_of_lt _ _ _ (by lia), ite_eq_right (by lia)]
 
 theorem getElem!_sweep1 (a c : Float64Array) (cj al len hc ha) (t : Float)
@@ -152,14 +152,14 @@ theorem getElem!_sweep1 (a c : Float64Array) (cj al len hc ha) (t : Float)
     simp only [Nat.add_zero]
   · intro i _ hi next c₁ h₁'
     simp only [Tail.run_readThen, Tail.run_writeThen]
-    apply Tail.run_congr
+    apply run_congr
     have hi' : i.toNat < len.toNat := by simpa using hi
     have e : ∀ {x : USize}, x.toNat + len.toNat ≤ c.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
     have ea : ∀ {x : USize}, x.toNat + len.toNat ≤ a.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
-    simp only [Float64Array.uget_eq_getElem, e hc, ea ha, Float64Array.set_eq_set!,
-      Float64Array.getElem_eq_getElem!]
+    simp only [Float64Array.uget_eq_getElem, e hc, ea ha, set_eq_set!,
+      getElem_eq_getElem!]
 
 /-! ## The loops -/
 
@@ -583,7 +583,7 @@ theorem gemmPairTerms_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float
   have hB : ∀ (jj ll : USize) (h), jj.toNat < n → ll.toNat ≤ k →
       α * B.data.uget (k.toUSize * jj + ll) h = α * B.data[ll.toNat + k * jj.toNat]! :=
     fun jj ll h hjj hll => by
-      rw [Float64Array.uget_eq_getElem, Float64Array.getElem_eq_getElem!,
+      rw [Float64Array.uget_eq_getElem, getElem_eq_getElem!,
         toNat_mul_add_eq hku hjj hll hs'.2.2.1, Nat.add_comm]
   obtain ⟨d, hd⟩ : ∃ d, l₁.toNat - l.toNat = d := ⟨_, rfl⟩
   induction d using Nat.strongRecOn generalizing l c cnt with
@@ -685,7 +685,7 @@ theorem gemmColTerms_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float)
   have hB : ∀ (jj ll : USize) (h), jj.toNat < n → ll.toNat ≤ k →
       α * B.data.uget (k.toUSize * jj + ll) h = α * B.data[ll.toNat + k * jj.toNat]! :=
     fun jj ll h hjj hll => by
-      rw [Float64Array.uget_eq_getElem, Float64Array.getElem_eq_getElem!,
+      rw [Float64Array.uget_eq_getElem, getElem_eq_getElem!,
         toNat_mul_add_eq hku hjj hll hs'.2.2.1, Nat.add_comm]
   obtain ⟨d, hd⟩ : ∃ d, l₁.toNat - l.toNat = d := ⟨_, rfl⟩
   induction d using Nat.strongRecOn generalizing l c cnt with
@@ -938,7 +938,7 @@ public theorem gemmBlocked_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : F
       apply ext
       intro i j hij
       rw [← gemm_eq, getElem_gemm]
-      simp only [gemmEntry, getElem_def, Float64Array.getElem_eq_getElem!, USize.toNat_zero, hnu]
+      simp only [gemmEntry, getElem_def, getElem_eq_getElem!, USize.toNat_zero, hnu]
       rw [hinv i j hij.1 hij.2]
       rfl
     · intro j _ hj next a h
@@ -951,7 +951,7 @@ public theorem gemmBlocked_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : F
         simp only [Tail.run_readThen, Tail.run_writeThen]
         have h1 : (m.toUSize * j + i).toNat = m * j.toNat + i.toNat :=
           toNat_mul_add_eq hmu hj (by lia) hs'.1
-        apply Tail.run_set_eq_set!
+        apply run_set_eq_set!
         · exact h1
         · have := index_lt hi hj
           have hC := C.size_data

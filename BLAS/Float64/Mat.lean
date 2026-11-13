@@ -229,12 +229,8 @@ public theorem mapMat_of_le (a : Float64Array) (off ld m lo hi g) (h : hi ≤ lo
   intro p _ hp
   exact getElem_mapMat_of_ne a off ld m lo hi g (fun i j _ h₁ h₂ => by lia) hp
 
-namespace Mat
-
-variable {m n : Nat}
-
 /-- `mapMat` depends only on the values of its function in the matrix. -/
-public theorem _root_.BLAS.Float64.mapMat_congr (a : Float64Array) (off ld m lo hi : Nat) {g g' : Nat → Nat → Float → Float}
+public theorem mapMat_congr (a : Float64Array) (off ld m lo hi : Nat) {g g' : Nat → Nat → Float → Float}
     (h : ∀ i j v, i < m → lo ≤ j → j < hi → g i j v = g' i j v) :
     mapMat a off ld m lo hi g = mapMat a off ld m lo hi g' := by
   apply ext_getElem (by simp)
@@ -243,6 +239,10 @@ public theorem _root_.BLAS.Float64.mapMat_congr (a : Float64Array) (off ld m lo 
   split
   · rename_i hc; exact h _ _ _ hc.2.1 hc.2.2.1 hc.2.2.2
   · rfl
+
+namespace Mat
+
+variable {m n : Nat}
 
 /--
 A matrix `B` whose array is the array of `A` with the element `(i, j)` mapped by `g i j`, at the
