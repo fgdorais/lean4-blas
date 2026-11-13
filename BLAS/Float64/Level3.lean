@@ -193,7 +193,7 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
           · intro i _ hi next'' a'' h''
             rw [hmu] at hi
             simp only [Tail.run_readThen, Tail.run_writeThen]
-            apply Tail.run_set_eq_set!
+            apply run_set_eq_set!
             · exact toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
             · have h1 := toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
               have h2 := toNat_mul_add_eq hku hj (Nat.le_of_lt hl) hs.2.2.1
@@ -207,7 +207,7 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
       · intro i _ hi next' a' h'
         rw [hmu] at hi
         simp only [Tail.run_readThen, Tail.run_writeThen]
-        apply Tail.run_set_eq_set!
+        apply run_set_eq_set!
         · exact toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
         · have h1 := toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
           have := index_lt hi hj
