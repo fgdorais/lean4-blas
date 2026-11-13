@@ -40,6 +40,8 @@ semantics of the reference BLAS (Reference-LAPACK `master`), including its speci
 | `scal α x` | `α * x`, over `x` | `(scal α x)[i] = α * x[i]` |
 | `copy x y` | `x`, over `y` | `(copy x y)[i] = x[i]` |
 | `swap x y` | `(y, x)` | `swap_fst`, `swap_snd` |
+| `rot c s x y` | `(c * x + s * y, c * y - s * x)`, over `x` and `y` | `getElem_rot_fst`, `getElem_rot_snd` |
+| `rotm p x y` | `H * (x, y)` for the modified rotation `p`, over `x` and `y` | `getElem_rotm_fst`, `getElem_rotm_snd` |
 | `dot x y` | `Σ x[i] * y[i]` | `Nat.fold n (fun i h s => s + x[i] * y[i]) 0` |
 | `asum x` | `Σ \|x[i]\|` | `Nat.fold n (fun i h s => s + x[i].abs) 0` |
 | `nrm2 x` | `√(Σ x[i] * x[i])`, scaled | `nrm2Finish (Nat.fold n (nrm2Step x) (0, 0, 0))` |
@@ -54,6 +56,13 @@ for every stride, and run as fast at stride `1` as loops over contiguous indices
 mid-range and the big elements in three accumulators, scaled by powers of `2`, so it overflows or
 underflows only when the norm does. `iamax` counts from `0`, unlike the reference BLAS, and is `0`
 for the empty vector.
+
+`rotg a b` and `rotmg d1 d2 x1 y1` construct a rotation and a modified rotation, step for step as
+the reference `drotg` and `drotmg`, and return their results in the structures `Rotg` and `Rotmg`
+rather than in their arguments. A `RotmParam` is the reference `DPARAM`: its flag says which
+entries of `H` `rotm` reads, and `rotmg` fills the others with the values the flag implies. Where
+the reference `drotmg` loops forever, when `d1` or `d2` is or becomes infinite, `rotmg` stops after
+`Rotmg.fuel` rescaling steps.
 
 `Mat m n` is an `m × n` matrix, stored in column-major order with an offset `off` and a leading
 dimension `ld ≥ m`, as in the reference BLAS: `A[(i, j)]` is at the index `off + ld * j + i`.
