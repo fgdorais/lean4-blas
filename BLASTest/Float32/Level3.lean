@@ -62,10 +62,21 @@ def gemmMatchesModel (m n k : Nat) (α β : Float32) : Bool :=
 #guard gemmMatchesModel 3 2 0 1 2
 #guard (Mat.gemm 1 (mat 3 0) (mat 0 2) 2 (mat 3 2)).toList == (mat 3 2).toList.map (2 * ·)
 
--- Unlike the reference BLAS, `β = 0` keeps a `NaN` of `C`.
+#guard gemmMatchesModel 5 4 3 0 0.5
+#guard gemmMatchesModel 5 4 3 1.5 0
+#guard gemmMatchesModel 5 4 3 0 0
+
+-- As in the reference BLAS, `β = 0` sets `C` to `0` without reading it, so a `NaN` in `C` goes.
 #guard
   let C : Mat 1 1 := Mat.ofPMat ⟨.ofList [0 / 0], by decide⟩
-  (Mat.gemm 1 (mat 1 1) (mat 1 1) 0 C).toList.all (·.isNaN)
+  (Mat.gemm 1 (mat 1 1) (mat 1 1) 0 C).toList == [(mat 1 1)[(0, 0)] * (mat 1 1)[(0, 0)]] &&
+    (Mat.gemmBlocked 1 (mat 1 1) (mat 1 1) 0 C).toList == [(mat 1 1)[(0, 0)] * (mat 1 1)[(0, 0)]]
+
+-- `α = 0` only scales `C`, without reading `A` or `B`.
+#guard
+  let A : Mat 1 1 := .ofFn fun _ _ => 0 / 0
+  let C : Mat 1 1 := .ofFn fun _ _ => 3
+  (Mat.gemm 0 A A 2 C).toList == [6] && (Mat.gemmBlocked 0 A A 0 C).toList == [0]
 
 /-- Whether `gemm` updates an unshared `C` in place. -/
 def gemmInPlace (m : Nat) : Bool :=

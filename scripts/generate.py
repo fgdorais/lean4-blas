@@ -50,7 +50,21 @@ SPECIFIC = [
   ('`2 ^ (-538)`', '`2 ^ (-76)`'),
   ('Float.ofBits 0x1E50000000000000', 'Float32.ofBits 0x19800000'),
   ('Float.ofBits 0x7FEFFFFFFFFFFFFF', 'Float32.ofBits 0x7F7FFFFF'),
-  ('`dnrm2.f90`', '`snrm2.f90`'),
+  # `rotg`'s scaling bounds (`drotg.f90` and `srotg.f90`): `safmin = 2 ^ max(minexponent - 1,
+  # 1 - maxexponent)`, the smallest normal number, and `safmax = 2 ^ max(1 - minexponent,
+  # maxexponent - 1)`.
+  ('`2⁻¹⁰²²`', '`2⁻¹²⁶`'),
+  ('Float.ofBits 0x0010000000000000', 'Float32.ofBits 0x00800000'),
+  ('`2¹⁰²³`', '`2¹²⁷`'),
+  ('Float.ofBits 0x7FE0000000000000', 'Float32.ofBits 0x7F000000'),
+  # The sign bit.
+  ('toBits >>> 63', 'toBits >>> 31'),
+  # `rotmg`'s constants: `srotmg.f` has `GAMSQ = 1.67772E7` and `RGAMSQ = 5.96046E-8`, where
+  # `drotmg.f` has `16777216.D0` and `5.9604645D-8`.
+  ('The reference\'s `GAMSQ`, `gam * gam`.', 'The reference\'s `GAMSQ`, the literal `1.67772E7` (close to, but not exactly, `gam * gam`).'),
+  ('def gamsq : Float := 16777216', 'def gamsq : Float := 1.67772e7'),
+  ('`5.9604645D-8`', '`5.96046E-8`'),
+  ('def rgamsq : Float := 5.9604645e-8', 'def rgamsq : Float := 5.96046e-8'),
   # The tests of `nrm2` with elements whose squares overflow or underflow.
   ('Float.scaleB 3 600, Float.scaleB (-4) 600]) == Float.scaleB 5 600',
    'Float.scaleB 3 80, Float.scaleB (-4) 80]) == Float.scaleB 5 80'),
@@ -67,6 +81,9 @@ SPECIFIC = [
   # The test of `trsv` against the reference loops: the unit solves of size 300 overflow `Float32`
   # (to `NaN`, which is not equal to itself); those of size 80 don't.
   ('trsvMatches 300 u d', 'trsvMatches 80 u d'),
+  # The tests of `rotg` whose squares overflow or underflow.
+  ('(rotg 3e300 4e300).r == 5e300', '(rotg 3e30 4e30).r == 5e30'),
+  ('(rotg 3e-300 4e-300).r == 5e-300', '(rotg 3e-30 4e-30).r == 5e-30'),
   # The tolerance of the residual of `trsv`.
   ('< 1e-12', '< 1e-4'),
 ]
@@ -76,12 +93,16 @@ MECHANICAL = [
   (r'Float64', 'Float32'),
   (r'\bFloat\b', 'Float32'),
   (r'\.toFloat\b', '.toFloat32'),
+  # The names of the reference routines, in prose: `drotg` becomes `srotg`, `idamax` `isamax`.
+  (r'`d(rotg|rotmg|rotm|rot|nrm2|dot|axpy|scal|copy|swap|asum|gemv|ger|trsv|gemm)\b', r'`s\1'),
+  (r'`idamax\b', '`isamax'),
 ]
 
 # Precision-dependent text that `SPECIFIC` should have translated.
 LEFTOVER = [
   (r'Float32\.ofBits 0x[0-9A-Fa-f]{9,}', 'a 64-bit `Float.ofBits` constant'),
   (r'\b\d+(\.\d+)?[eE][+-]?(39|[4-9]\d|\d{3,})\b', 'a literal beyond the range of `Float32`'),
+  (r'>>> 63\b', 'a shift by the sign bit of a 64-bit word'),
   (r'\bscaleB\s+\S+\s+\(?-?(1[5-9]\d|[2-9]\d\d|\d{4,})\)?', 'an exponent beyond `Float32`'),
 ]
 

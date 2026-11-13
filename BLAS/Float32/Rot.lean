@@ -1,0 +1,428 @@
+/-
+Copyright © 2026 François G. Dorais. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+-/
+module
+
+public import BLAS.Float32.Level1
+
+/-!
+# Plane rotations
+
+The Level 1 rotations of the reference BLAS: `rot` applies a plane rotation to two vectors, and
+`rotm` a modified rotation, both by `zip`, a loop that updates the two arrays together, in place
+when they are not shared. `rotg` and `rotmg` construct a rotation and a modified rotation from
+scalars, step for step as the reference BLAS does.
+-/
+
+open ScalarArray Float32Array
+
+namespace BLAS.Float32
+
+/-! ## Two vectors at once -/
+
+/-- `uset` is `set!`. -/
+private theorem uset_eq_set! (a : Float32Array) (i : USize) (v : Float32) (h : i.toNat < a.size) :
+    a.uset i v h = a.set! i.toNat v := by
+  apply ext_getElem (by simp)
+  intro j _ _
+  simp
+
+namespace Vec
+
+variable {n : Nat}
+
+/--
+The loop of `zip`, from the step `i`, up to the bound `m`, which is `n`, on the arrays `a` and `b`
+of sizes `N₁` and `N₂`, at the indices of the strides `sx` and `sy`, given as `USize`s: it writes
+`f u v` over the element `u` of `a` and `g u v` over the element `v` of `b`. It takes the strides
+rather than the vectors, so that it doesn't keep the vectors' arrays alive while it writes to them.
+-/
+-- `n` comes after `f` and `g`, not from `variable`: with `n` first, the compiler did not specialize
+-- the loop to `f` and `g` (checked with Lean v4.36.0-rc2).
+@[specialize] public def zipLoop (f g : Float32 → Float32 → Float32) {n : Nat} (sx sy : Stride) {N₁ N₂ : Nat}
+    (hx : sx.Fits n N₁) (hy : sy.Fits n N₂) (hN₁ : N₁ < USize.size) (hN₂ : N₂ < USize.size)
+    (xo xc yo yc : USize) (hxo : sx.off.toUSize = xo) (hxc : sx.inc.toUSize = xc)
+    (hyo : sy.off.toUSize = yo) (hyc : sy.inc.toUSize = yc) (m : USize) (hm : m.toNat = n)
+    (i : USize) (a b : Float32Array) (ha : a.size = N₁) (hb : b.size = N₂) :
+    Float32Array × Float32Array :=
+  if hi : i < m then
+    have hp : (xo + xc * i).toNat < a.size := by
+      rw [← hxo, ← hxc, ha]; exact Stride.toNat_idx_toUSize_lt hx hN₁ (by grind)
+    have hq : (yo + yc * i).toNat < b.size := by
+      rw [← hyo, ← hyc, hb]; exact Stride.toNat_idx_toUSize_lt hy hN₂ (by grind)
+    let u := a.uget (xo + xc * i) hp
+    let v := b.uget (yo + yc * i) hq
+    zipLoop f g sx sy hx hy hN₁ hN₂ xo xc yo yc hxo hxc hyo hyc m hm (i + 1)
+      (a.uset (xo + xc * i) (f u v) hp) (b.uset (yo + yc * i) (g u v) hq)
+      (by simp [ha]) (by simp [hb])
+  else (a, b)
+termination_by m.toNat - i.toNat
+decreasing_by grind
+
+/-- An element at a later step of a stride is not changed by the steps before. -/
+private theorem getElem_modifyAt_later (A : Float32Array) {s : Stride} {N : Nat}
+    (hs : s.Fits n N) (hA : A.size = N) (G : Nat → Float32 → Float32) {j : Nat} (hj : j < n) :
+    (A.modifyAt s.idx 0 j G)[s.idx j]! = A[s.idx j]! := by
+  have hq : s.idx j < A.size := hA ▸ hs.idx_lt hj
+  rw [getElem!_pos _ _ (by simpa using hq), getElem!_pos A _ hq,
+    getElem_modifyAt_of_forall_ne]
+  intro i _ hi e
+  have := hs.idx_inj (by lia) hj e
+  lia
+
+private theorem zipLoop_eq (f g : Float32 → Float32 → Float32) (sx sy : Stride) {N₁ N₂ : Nat}
+    (hx : sx.Fits n N₁) (hy : sy.Fits n N₂) (hN₁ : N₁ < USize.size) (hN₂ : N₂ < USize.size)
+    (xo xc yo yc : USize) (hxo : sx.off.toUSize = xo) (hxc : sx.inc.toUSize = xc)
+    (hyo : sy.off.toUSize = yo) (hyc : sy.inc.toUSize = yc) (m : USize) (hm : m.toNat = n)
+    (A B : Float32Array) (hA : A.size = N₁) (hB : B.size = N₂)
+    (i : USize) (j : Nat) (hj : i.toNat = j) (hjn : j ≤ n) (a b : Float32Array) (ha hb)
+    (hacc : a = A.modifyAt sx.idx 0 j (fun k u => f u B[sy.idx k]!) ∧
+      b = B.modifyAt sy.idx 0 j (fun k v => g A[sx.idx k]! v)) :
+    zipLoop f g sx sy hx hy hN₁ hN₂ xo xc yo yc hxo hxc hyo hyc m hm i a b ha hb =
+      (A.modifyAt sx.idx 0 n (fun k u => f u B[sy.idx k]!),
+        B.modifyAt sy.idx 0 n (fun k v => g A[sx.idx k]! v)) := by
+  obtain ⟨d, hd⟩ : ∃ d, n - j = d := ⟨_, rfl⟩
+  induction d generalizing i j a b with
+  | zero =>
+    rw [zipLoop, dite_eq_right_of_eq_false (eq_false (by grind))]
+    obtain rfl : j = n := by lia
+    rw [hacc.1, hacc.2]
+  | succ d ih =>
+    have := hx.le_size
+    have hi : i < m := by grind
+    have hjn' : j < n := by lia
+    have hlt : i.toNat < m.toNat := USize.lt_iff_toNat_lt.mp hi
+    have hsucc : (i + 1).toNat = j + 1 := by
+      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]; lia
+    rw [zipLoop, dite_eq_left_of_eq_true (eq_true hi)]
+    have hp := Stride.toNat_idx_toUSize hx hN₁ (i := i) (by lia)
+    have hq := Stride.toNat_idx_toUSize hy hN₂ (i := i) (by lia)
+    rw [hxo, hxc] at hp
+    rw [hyo, hyc] at hq
+    obtain ⟨rfl, rfl⟩ := hacc
+    subst hj
+    apply ih (i + 1) (i.toNat + 1) hsucc (by lia) _ _ _ _ _ (by lia)
+    have ea := getElem_modifyAt_later A hx hA (fun k u => f u B[sy.idx k]!) hjn'
+    have eb := getElem_modifyAt_later B hy hB (fun k v => g A[sx.idx k]! v) hjn'
+    simp only [uset_eq_set!, Float32Array.uget_eq_getElem, hp, hq,
+      modifyAt_succ _ _ (Nat.zero_le _), getElem_eq_getElem!, ea, eb]
+    all_goals trivial
+
+/--
+The arrays of `zip`, as `modifyAt`s: the model of the loop, for arrays too large for it. It is not
+inlined, so that `f` and `g` don't escape into closures in `zipData`, which would keep the compiler
+from specializing `zipLoop` to them.
+-/
+@[noinline] public def zipModel (f g : Float32 → Float32 → Float32) (x y : Vec n) :
+    Float32Array × Float32Array :=
+  (x.data.modifyAt x.stride.idx 0 n (fun k u => f u y.data[y.stride.idx k]!),
+    y.data.modifyAt y.stride.idx 0 n (fun k v => g x.data[x.stride.idx k]! v))
+
+/--
+`zip f g x y` writes `f x[i] y[i]` over `x[i]` and `g x[i] y[i]` over `y[i]`, for each `i`, in
+place when the arrays of `x` and `y` are not shared. Both values come from the old elements.
+-/
+@[inline] public def zipData (f g : Float32 → Float32 → Float32) (x y : Vec n) :
+    Float32Array × Float32Array :=
+  if hs : x.data.size < USize.size ∧ y.data.size < USize.size then
+    zipLoop f g x.stride y.stride x.fits y.fits hs.1 hs.2 _ _ _ _ rfl rfl rfl rfl n.toUSize
+      (x.toNat_toUSize hs.1) 0 x.data y.data rfl rfl
+  else zipModel f g x y
+
+public theorem zipData_eq (f g : Float32 → Float32 → Float32) (x y : Vec n) :
+    zipData f g x y = (x.data.modifyAt x.stride.idx 0 n (fun k u => f u y.data[y.stride.idx k]!),
+      y.data.modifyAt y.stride.idx 0 n (fun k v => g x.data[x.stride.idx k]! v)) := by
+  unfold zipData
+  split
+  · exact zipLoop_eq f g _ _ _ _ _ _ _ _ _ _ rfl rfl rfl rfl _ _ _ _ rfl rfl 0 0 (by simp)
+      (by lia) _ _ _ _ ⟨(modifyAt_of_le _ _ (Nat.le_refl _) _).symm,
+        (modifyAt_of_le _ _ (Nat.le_refl _) _).symm⟩
+  · rfl
+
+/--
+`zip f g x y`: the vectors `x` and `y` with `f x[i] y[i]` and `g x[i] y[i]` at `i`.
+
+It takes `x` and `y` apart first, so that only their arrays go on to the loop and stay unshared.
+-/
+@[inline, expose] public def zip (f g : Float32 → Float32 → Float32) : Vec n → Vec n → Vec n × Vec n
+  | ⟨xd, xo, xi, xp, xb⟩, ⟨yd, yo, yi, yp, yb⟩ =>
+    let d := zipData f g ⟨xd, xo, xi, xp, xb⟩ ⟨yd, yo, yi, yp, yb⟩
+    have hd : d = _ := zipData_eq ..
+    ({ data := d.1, off := xo, inc := xi, inc_pos := xp
+       bound := by rw [hd, size_modifyAt]; exact xb },
+     { data := d.2, off := yo, inc := yi, inc_pos := yp
+       bound := by rw [hd, size_modifyAt]; exact yb })
+
+@[simp] public theorem getElem_zip_fst (f g : Float32 → Float32 → Float32) (x y : Vec n) (i : Nat)
+    (h : i < n) : (zip f g x y).1[i] = f x[i] y[i] := by
+  rw [getElem_of_data_eq_modifyAt (v := (zip f g x y).1) (w := x)
+    (fun k u => f u y.data[y.stride.idx k]!)
+    (by cases x; cases y; exact congrArg Prod.fst (zipData_eq ..)) (by cases x; cases y; rfl)
+    (by cases x; cases y; rfl) i h, idx_stride,
+    getElem!_pos y.data _ (y.index_lt h)]
+  rfl
+
+@[simp] public theorem getElem_zip_snd (f g : Float32 → Float32 → Float32) (x y : Vec n) (i : Nat)
+    (h : i < n) : (zip f g x y).2[i] = g x[i] y[i] := by
+  rw [getElem_of_data_eq_modifyAt (v := (zip f g x y).2) (w := y)
+    (fun k v => g x.data[x.stride.idx k]! v)
+    (by cases x; cases y; exact congrArg Prod.snd (zipData_eq ..)) (by cases x; cases y; rfl)
+    (by cases x; cases y; rfl) i h, idx_stride,
+    getElem!_pos x.data _ (x.index_lt h)]
+  rfl
+
+/-! ## `rot` and `rotm` -/
+
+/--
+`rot c s x y` applies the plane rotation `[c s; -s c]` to the pairs `(x[i], y[i])`, as the
+reference `srot`: `x[i] ↦ c * x[i] + s * y[i]` and `y[i] ↦ c * y[i] - s * x[i]`.
+-/
+@[expose] public def rot (c s : Float32) (x y : Vec n) : Vec n × Vec n :=
+  zip (fun u v => c * u + s * v) (fun u v => c * v - s * u) x y
+
+@[simp] public theorem getElem_rot_fst (c s : Float32) (x y : Vec n) (i : Nat) (h : i < n) :
+    (rot c s x y).1[i] = c * x[i] + s * y[i] := getElem_zip_fst ..
+
+@[simp] public theorem getElem_rot_snd (c s : Float32) (x y : Vec n) (i : Nat) (h : i < n) :
+    (rot c s x y).2[i] = c * y[i] - s * x[i] := getElem_zip_snd ..
+
+end Vec
+
+/--
+The parameter of a modified rotation, the reference `DPARAM` array: `flag` is `DPARAM(1)` and
+`h11`, `h21`, `h12`, `h22` are `DPARAM(2)` to `DPARAM(5)`, the entries of `H = [h11 h12; h21 h22]`.
+
+The flag tells which entries `rotm` reads:
+* `-2`: `H` is the identity and no entry is read;
+* `-1`: all four entries are read;
+* `0`: `h11 = h22 = 1` are implied, only `h21` and `h12` are read;
+* any other value (`1` from `rotmg`, or NaN): `h21 = -1` and `h12 = 1` are implied, only `h11` and
+  `h22` are read.
+-/
+public structure RotmParam where
+  flag : Float32
+  h11 : Float32
+  h21 : Float32
+  h12 : Float32
+  h22 : Float32
+deriving Inhabited, Repr
+
+namespace Vec
+
+/--
+`rotm p x y` applies the modified rotation `H` of `p` to the pairs `(x[i], y[i])`, as the reference
+`srotm`: `x[i] ↦ x[i] * h11 + y[i] * h12` and `y[i] ↦ x[i] * h21 + y[i] * h22`, with the entries
+implied by the flag written out in the reference's way (see `RotmParam`).
+-/
+@[expose] public def rotm (p : RotmParam) (x y : Vec n) : Vec n × Vec n :=
+  if p.flag + 2 == 0 then (x, y)
+  else if p.flag < 0 then
+    zip (fun w z => w * p.h11 + z * p.h12) (fun w z => w * p.h21 + z * p.h22) x y
+  else if p.flag == 0 then
+    zip (fun w z => w + z * p.h12) (fun w z => w * p.h21 + z) x y
+  else
+    zip (fun w z => w * p.h11 + z) (fun w z => -w + p.h22 * z) x y
+
+@[simp] public theorem getElem_rotm_fst (p : RotmParam) (x y : Vec n) (i : Nat) (h : i < n) :
+    (rotm p x y).1[i] =
+      if p.flag + 2 == 0 then x[i]
+      else if p.flag < 0 then x[i] * p.h11 + y[i] * p.h12
+      else if p.flag == 0 then x[i] + y[i] * p.h12
+      else x[i] * p.h11 + y[i] := by
+  unfold rotm; split <;> (try split) <;> (try split) <;> simp [*]
+
+@[simp] public theorem getElem_rotm_snd (p : RotmParam) (x y : Vec n) (i : Nat) (h : i < n) :
+    (rotm p x y).2[i] =
+      if p.flag + 2 == 0 then y[i]
+      else if p.flag < 0 then x[i] * p.h21 + y[i] * p.h22
+      else if p.flag == 0 then x[i] * p.h21 + y[i]
+      else -x[i] + p.h22 * y[i] := by
+  unfold rotm; split <;> (try split) <;> (try split) <;> simp [*]
+
+end Vec
+
+/-! ## `rotg` -/
+
+/-- The result of `rotg a b`: the rotation `c`, `s`, the rotated `r`, and the reconstruction
+value `z` that the reference `srotg` returns in `b`. -/
+public structure Rotg where
+  r : Float32
+  z : Float32
+  c : Float32
+  s : Float32
+deriving Inhabited, Repr
+
+namespace Rotg
+
+/-- The smallest normal number `2⁻¹²⁶`, the reference `safmin`. -/
+@[expose] public def safmin : Float32 := Float32.ofBits 0x00800000
+
+/-- `2¹²⁷`, the reference `safmax`. -/
+@[expose] public def safmax : Float32 := Float32.ofBits 0x7F000000
+
+/-- Fortran's `sign(1, x)`: `-1` when the sign bit of `x` is set, `1` otherwise. -/
+@[inline, expose] public def sign1 (x : Float32) : Float32 :=
+  if x.toBits >>> 31 == 0 then 1 else -1
+
+/-- Fortran's `max` of two values as gfortran compiles it: the first unless the second is greater. -/
+@[inline, expose] public def fmax (a b : Float32) : Float32 := if b > a then b else a
+
+/-- Fortran's `min` of two values as gfortran compiles it: the first unless the second is smaller. -/
+@[inline, expose] public def fmin (a b : Float32) : Float32 := if b < a then b else a
+
+end Rotg
+
+open Rotg in
+/--
+`rotg a b` constructs the plane rotation that zeros `b`, step for step as the reference `srotg`
+(the Anderson 2017 version): `c * a + s * b = r` and `-s * a + c * b = 0`, with `r` carrying the
+sign of the larger of `a` and `b` in magnitude, computed with scaling so that it does not overflow
+or underflow when the result is representable.
+-/
+@[expose] public def rotg (a b : Float32) : Rotg :=
+  let anorm := a.abs
+  let bnorm := b.abs
+  if bnorm == 0 then { r := a, z := 0, c := 1, s := 0 }
+  else if anorm == 0 then { r := b, z := 1, c := 0, s := 1 }
+  else
+    let scl := fmin safmax (fmax (fmax safmin anorm) bnorm)
+    let sigma := if anorm > bnorm then sign1 a else sign1 b
+    let r := sigma * (scl * ((a / scl) * (a / scl) + (b / scl) * (b / scl)).sqrt)
+    let c := a / r
+    let s := b / r
+    let z := if anorm > bnorm then s else if c != 0 then 1 / c else 1
+    { r, z, c, s }
+
+/-! ## `rotmg` -/
+
+namespace Rotmg
+
+/-- The reference's rescaling factor `GAM`. -/
+@[expose] public def gam : Float32 := 4096
+
+/-- The reference's `GAMSQ`, the literal `1.67772E7` (close to, but not exactly, `gam * gam`). -/
+@[expose] public def gamsq : Float32 := 1.67772e7
+
+/-- The reference's `RGAMSQ`, the literal `5.96046E-8` (close to, but not exactly, `1 / gamsq`). -/
+@[expose] public def rgamsq : Float32 := 5.96046e-8
+
+/-- The state of `rotmg`: the flag, `H`, and the scaled `d1`, `d2`, `x1`. -/
+public structure State where
+  flag : Float32
+  h11 : Float32
+  h21 : Float32
+  h12 : Float32
+  h22 : Float32
+  d1 : Float32
+  d2 : Float32
+  x1 : Float32
+
+/-- The reference's reset when the rotation does not exist: flag `-1`, `H = 0`, `d1 = d2 = x1 = 0`. -/
+@[expose] public def State.zero : State :=
+  { flag := -1, h11 := 0, h21 := 0, h12 := 0, h22 := 0, d1 := 0, d2 := 0, x1 := 0 }
+
+/-- Before a rescaling step, the reference writes out the entries implied by flags `0` and `1` and
+sets the flag to `-1`. -/
+@[expose] public def State.expand (t : State) : State :=
+  if t.flag == 0 then { t with h11 := 1, h22 := 1, flag := -1 }
+  else if t.flag == 1 then { t with h21 := -1, h12 := 1, flag := -1 }
+  else t
+
+/-- The reference's `DO WHILE` loop that brings `d1` into `(rgamsq, gamsq)`, with fuel: a finite
+nonzero `d1` takes at most 46 steps, while for an infinite `d1` the reference loops forever and
+this stops when the fuel runs out. -/
+@[expose] public def scale1 : Nat → State → State
+  | 0, t => t
+  | fuel + 1, t =>
+    if t.d1 ≤ rgamsq || t.d1 ≥ gamsq then
+      let t := t.expand
+      if t.d1 ≤ rgamsq then
+        scale1 fuel
+          { t with d1 := t.d1 * (gam * gam), x1 := t.x1 / gam, h11 := t.h11 / gam,
+                   h12 := t.h12 / gam }
+      else
+        scale1 fuel
+          { t with d1 := t.d1 / (gam * gam), x1 := t.x1 * gam, h11 := t.h11 * gam,
+                   h12 := t.h12 * gam }
+    else t
+
+/-- The reference's `DO WHILE` loop that brings `|d2|` into `(rgamsq, gamsq)`, with fuel as in
+`scale1`. -/
+@[expose] public def scale2 : Nat → State → State
+  | 0, t => t
+  | fuel + 1, t =>
+    if t.d2.abs ≤ rgamsq || t.d2.abs ≥ gamsq then
+      let t := t.expand
+      if t.d2.abs ≤ rgamsq then
+        scale2 fuel { t with d2 := t.d2 * (gam * gam), h21 := t.h21 / gam, h22 := t.h22 / gam }
+      else
+        scale2 fuel { t with d2 := t.d2 / (gam * gam), h21 := t.h21 * gam, h22 := t.h22 * gam }
+    else t
+
+/-- The fuel of `scale1` and `scale2`. -/
+@[expose] public def fuel : Nat := 128
+
+end Rotmg
+
+/-- The result of `rotmg d1 d2 x1 y1`: the parameter of the modified rotation and the new `d1`,
+`d2`, `x1`, which the reference `srotmg` returns in its arguments. -/
+public structure Rotmg where
+  param : RotmParam
+  d1 : Float32
+  d2 : Float32
+  x1 : Float32
+deriving Inhabited, Repr
+
+open Rotmg in
+/--
+`rotmg d1 d2 x1 y1` constructs the modified rotation `H` that zeros the second component of
+`(√d1 * x1, √d2 * y1)`, step for step as the reference `srotmg`.
+
+The reference writes only the entries of `DPARAM` that the flag says `rotm` reads, and leaves the
+others as they were; here those entries hold the values the flag implies (`H` is the identity for
+flag `-2`). The reference also leaves `DH11` and `DH22` unset on the flag `0` path, and `DH21` and
+`DH12` on the flag `1` path, until a rescaling writes them; those are not read either. Where the
+reference loops forever on an infinite `d1` or `d2`, this stops after `Rotmg.fuel` steps.
+-/
+@[expose] public def rotmg (d1 d2 x1 y1 : Float32) : Rotmg :=
+  let finish (t : State) : Rotmg :=
+    let t := if t.d1 != 0 then scale1 fuel t else t
+    let t := if t.d2 != 0 then scale2 fuel t else t
+    let param : RotmParam :=
+      if t.flag < 0 then
+        { flag := t.flag, h11 := t.h11, h21 := t.h21, h12 := t.h12, h22 := t.h22 }
+      else if t.flag == 0 then
+        { flag := t.flag, h11 := 1, h21 := t.h21, h12 := t.h12, h22 := 1 }
+      else
+        { flag := t.flag, h11 := t.h11, h21 := -1, h12 := 1, h22 := t.h22 }
+    { param, d1 := t.d1, d2 := t.d2, x1 := t.x1 }
+  if d1 < 0 then
+    { param := { flag := -1, h11 := 0, h21 := 0, h12 := 0, h22 := 0 }, d1 := 0, d2 := 0, x1 := 0 }
+  else
+    let p2 := d2 * y1
+    if p2 == 0 then
+      { param := { flag := -2, h11 := 1, h21 := 0, h12 := 0, h22 := 1 }, d1, d2, x1 }
+    else
+      let p1 := d1 * x1
+      let q2 := p2 * y1
+      let q1 := p1 * x1
+      if q1.abs > q2.abs then
+        let h21 := -y1 / x1
+        let h12 := p2 / p1
+        let u := 1 - h12 * h21
+        if u > 0 then
+          finish
+            { flag := 0, h11 := 1, h21, h12, h22 := 1, d1 := d1 / u, d2 := d2 / u,
+              x1 := x1 * u }
+        else finish State.zero
+      else if q2 < 0 then finish State.zero
+      else
+        let h11 := p1 / p2
+        let h22 := x1 / y1
+        let u := 1 + h11 * h22
+        finish
+          { flag := 1, h11, h21 := -1, h12 := 1, h22, d1 := d2 / u, d2 := d1 / u,
+            x1 := y1 * u }
+
+end BLAS.Float32
