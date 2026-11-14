@@ -434,7 +434,7 @@ public def gemvTSums (A : Mat m n) (x : Vec m) (ao al xo xc : USize) (ha : A.off
 termination_by n - j.toNat
 decreasing_by all_goals grind
 
-private theorem gemvTSums_spec (A : Mat m n) (x : Vec m) (ao al xo xc : USize)
+public theorem gemvTSums_spec (A : Mat m n) (x : Vec m) (ao al xo xc : USize)
     (ha : A.off.toUSize = ao) (hl : A.ld.toUSize = al) (hx : x.off.toUSize = xo)
     (hc : x.inc.toUSize = xc) (hs : A.data.size < USize.size ∧ x.data.size < USize.size)
     (hn : n < USize.size) (mu : USize) (hmu : mu.toNat = m) (nu : USize) (hnu : nu.toNat = n)
