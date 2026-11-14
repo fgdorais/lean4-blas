@@ -50,7 +50,6 @@ SPECIFIC = [
   ('`2 ^ (-538)`', '`2 ^ (-76)`'),
   ('Float.ofBits 0x1E50000000000000', 'Float32.ofBits 0x19800000'),
   ('Float.ofBits 0x7FEFFFFFFFFFFFFF', 'Float32.ofBits 0x7F7FFFFF'),
-  ('`dnrm2.f90`', '`snrm2.f90`'),
   # The tests of `nrm2` with elements whose squares overflow or underflow.
   ('Float.scaleB 3 600, Float.scaleB (-4) 600]) == Float.scaleB 5 600',
    'Float.scaleB 3 80, Float.scaleB (-4) 80]) == Float.scaleB 5 80'),
@@ -69,11 +68,8 @@ SPECIFIC = [
   ('trsvMatches 300 u d', 'trsvMatches 80 u d'),
   # The tolerance of the residual of `trsv`.
   ('< 1e-12', '< 1e-4'),
-  # The rotations: the reference routines, and the constants of `srotg.f90` and `srotmg.f`.
-  ('`drot`', '`srot`'),
-  ('`drotm`', '`srotm`'),
-  ('`drotg`', '`srotg`'),
-  ('`drotmg`', '`srotmg`'),
+  # The rotations: the constants of `srotg.f90` and `srotmg.f`, and the sign bit of `sign1`.
+  ('toBits >>> 63', 'toBits >>> 31'),
   ('`2⁻¹⁰²²`', '`2⁻¹²⁶`'),
   ('Float.ofBits 0x0010000000000000', 'Float32.ofBits 0x00800000'),
   ('`2¹⁰²³`', '`2¹²⁷`'),
@@ -94,12 +90,16 @@ MECHANICAL = [
   (r'Float64', 'Float32'),
   (r'\bFloat\b', 'Float32'),
   (r'\.toFloat\b', '.toFloat32'),
+  # The names of the reference routines, in prose: `drotg` becomes `srotg`, `idamax` `isamax`.
+  (r'`d(rotg|rotmg|rotm|rot|nrm2|dot|axpy|scal|copy|swap|asum|gemv|ger|trsv|gemm)\b', r'`s\1'),
+  (r'`idamax\b', '`isamax'),
 ]
 
 # Precision-dependent text that `SPECIFIC` should have translated.
 LEFTOVER = [
   (r'Float32\.ofBits 0x[0-9A-Fa-f]{9,}', 'a 64-bit `Float.ofBits` constant'),
   (r'\b\d+(\.\d+)?[eE][+-]?(39|[4-9]\d|\d{3,})\b', 'a literal beyond the range of `Float32`'),
+  (r'>>> 63\b', 'a shift by the sign bit of a 64-bit word'),
   (r'\bscaleB\s+\S+\s+\(?-?(1[5-9]\d|[2-9]\d\d|\d{4,})\)?', 'an exponent beyond `Float32`'),
 ]
 

@@ -163,7 +163,7 @@ namespace Rotg
 
 /-- Fortran's `sign(1, x)`: `-1` when the sign bit of `x` is set, `1` otherwise. -/
 @[inline, expose] public def sign1 (x : Float32) : Float32 :=
-  if x.toBits >>> 63 == 0 then 1 else -1
+  if x.toBits >>> 31 == 0 then 1 else -1
 
 /-- Fortran's `max` of two values as gfortran compiles it: the first unless the second is greater. -/
 @[inline, expose] public def fmax (a b : Float32) : Float32 := if b > a then b else a
