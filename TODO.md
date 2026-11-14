@@ -20,13 +20,16 @@ Changes that would reorder them, such as partial sums in `dot`, `asum` and `nrm2
 - [ ] Parallel `gemm` over blocks of columns of `C`, with `Task`. Each column is independent, so
   the result stays the same to the bit. OpenBLAS on 4 threads is 10–18× ahead.
 
-## `syrk` and `trsm` (8–19× and 2–7× behind at 256–1024)
+## `syrk`, `syrkT` and `trsm` (8–18×, 7–11× and 2–9× behind at 256–1024)
 
-- [ ] `syrkT`: compute four elements of a column at a time, which share the reads of column `j` of
-  `A` and give four independent chains of additions, as `gemvT` does with four columns. A C
-  prototype in the exact order runs 2× faster with four, and no faster with eight or sixteen.
+- [x] `syrkT`: compute four elements of a column at a time, with the sums of `gemvT`. About 2×.
 - [ ] `syrk`: sweep the rows of a block for several terms at a time, as `gemm` does. Each element
   keeps its order of terms, including the skipped ones.
+- [ ] `syrk`: two columns at a time, which share the reads of each column of `A`, with each column's
+  skipped terms kept. A C prototype in the exact order is 1.2–1.4× faster.
+- [ ] `trsm`: solve four columns of `B` at a time, which share the reads of `A`. The columns are
+  independent, so each keeps its order of operations. A C prototype is 1.3× faster at 256 and 2×
+  at 1024, where a column at a time reads all of `A` from memory for each column.
 - [ ] `trsm`, `trsmRight`: update the rest of `B` by the `gemm` kernel after each block of solved
   rows or columns. This changes the order of the updates of an element only if the blocks reorder
   its terms, so it needs care to stay exact.
