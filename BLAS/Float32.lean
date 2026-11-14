@@ -12,6 +12,8 @@ public import BLAS.Float32.PMat
 public import BLAS.Float32.Mat
 public import BLAS.Float32.Level2
 public import BLAS.Float32.Trsv
+public import BLAS.Float32.Syrk
 public import BLAS.Float32.Level3
 public import BLAS.Float32.GemmBlocked
 public import BLAS.Float32.Gemm
+public import BLAS.Float32.Trsm
