@@ -40,6 +40,10 @@ def flops(name):
     if m:
         n = int(m.group(1))
         return 2 * n * n * n
+    m = re.fullmatch(r"(?:syrkT?|trsm|trsmRight) (?:lower|upper) (\d+)", name)
+    if m:
+        n = int(m.group(1))
+        return n * n * n
     return None
 
 

@@ -30,6 +30,7 @@ enum { RowMajor = 101, ColMajor = 102 };
 enum { NoTrans = 111, Trans = 112 };
 enum { Upper = 121, Lower = 122 };
 enum { NonUnit = 131 };
+enum { Left = 141, Right = 142 };
 
 /* The precision: `double` by default, `float` with `-DSINGLE`. */
 #ifdef SINGLE
@@ -58,6 +59,8 @@ static void (*dger)(int, int, int, real, const real *, int, const real *, int, r
 static void (*dtrsv)(int, int, int, int, int, const real *, int, real *, int);
 static void (*dgemm)(int, int, int, int, int, int, real, const real *, int, const real *,
                      int, real, real *, int);
+static void (*dsyrk)(int, int, int, int, int, real, const real *, int, real, real *, int);
+static void (*dtrsm)(int, int, int, int, int, int, int, real, const real *, int, real *, int);
 
 static void *sym(void *lib, const char *name) {
   void *p = dlsym(lib, name);
@@ -205,6 +208,37 @@ static double b_gemm(void *e) {
   return v->z[0];
 }
 
+/* As `gemm`, `syrk` and `trsm` write into a copy of `C`, or of `B`, which is `c`. */
+static double b_syrk(void *e) {
+  L3 *v = e;
+  int m = v->m;
+  memcpy(v->z, v->c, (size_t)m * m * sizeof(real));
+  dsyrk(ColMajor, Lower, NoTrans, m, m, 1.5, v->a, m, 0.5, v->z, m);
+  return v->z[0];
+}
+static double b_syrkT(void *e) {
+  L3 *v = e;
+  int m = v->m;
+  memcpy(v->z, v->c, (size_t)m * m * sizeof(real));
+  dsyrk(ColMajor, Lower, Trans, m, m, 1.5, v->a, m, 0.5, v->z, m);
+  return v->z[0];
+}
+/* `b` holds the triangular matrix. */
+static double b_trsmL(void *e) {
+  L3 *v = e;
+  int m = v->m;
+  memcpy(v->z, v->c, (size_t)m * m * sizeof(real));
+  dtrsm(ColMajor, Left, Lower, NoTrans, NonUnit, m, m, 1.5, v->b, m, v->z, m);
+  return v->z[0];
+}
+static double b_trsmR(void *e) {
+  L3 *v = e;
+  int m = v->m;
+  memcpy(v->z, v->c, (size_t)m * m * sizeof(real));
+  dtrsm(ColMajor, Right, Upper, NoTrans, NonUnit, m, m, 1.5, v->b, m, v->z, m);
+  return v->z[0];
+}
+
 int main(int argc, char **argv) {
   if (argc < 2) {
     fprintf(stderr, "usage: %s libblas.so [size] [rounds]\n", argv[0]);
@@ -229,6 +263,8 @@ int main(int argc, char **argv) {
   dger = sym(lib, CBLAS("ger"));
   dtrsv = sym(lib, CBLAS("trsv"));
   dgemm = sym(lib, CBLAS("gemm"));
+  dsyrk = sym(lib, CBLAS("syrk"));
+  dtrsm = sym(lib, CBLAS("trsm"));
 
   char name[64];
   L1 v = {n, 1, vec(n), vec(n), vec(n)};
@@ -282,6 +318,23 @@ int main(int argc, char **argv) {
     L3 g = {m, mat(m, 1), mat(m, 2), mat(m, 3), mat(m, 3)};
     snprintf(name, sizeof name, "gemm %d", m);
     time_it(name, b_gemm, &g);
+  }
+
+  int l3s[] = {256, 512, 1024};
+  for (int s = 0; s < 3; s++) {
+    int m = l3s[s];
+    L3 g = {m, mat(m, 1), mat(m, 1), mat(m, 3), mat(m, 3)};
+    for (int j = 0; j < m; j++)
+      for (int i = 0; i < m; i++)
+        g.b[i + (size_t)m * j] = i == j ? m + 4 + i : (real)((i * 7 + j * 13) % 11) - 5;
+    snprintf(name, sizeof name, "syrk lower %d", m);
+    time_it(name, b_syrk, &g);
+    snprintf(name, sizeof name, "syrkT lower %d", m);
+    time_it(name, b_syrkT, &g);
+    snprintf(name, sizeof name, "trsm lower %d", m);
+    time_it(name, b_trsmL, &g);
+    snprintf(name, sizeof name, "trsmRight upper %d", m);
+    time_it(name, b_trsmR, &g);
   }
   return 0;
 }

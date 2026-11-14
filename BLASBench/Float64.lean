@@ -305,11 +305,35 @@ def level2Rows (rounds m : Nat) : IO (List Row × Nat) := do
     ⟨s!"trsv lower {m} ×{reps}", tl, none⟩, ⟨s!"trsv upper {m} ×{reps}", tu, none⟩],
     2 * m * m * reps)
 
-/-- All the benchmarks: Level 1, Level 2 and `gemm`, each with its floating-point operations. -/
-public def all (rounds n : Nat) : IO (List Row × List (List Row × Nat) × List (List Row × Nat)) := do
+/--
+The `syrk` and `trsm` benchmarks for `m × m` matrices: `syrk` and `syrkT` on the lower triangle,
+`trsm` on the lower triangle and `trsmRight` on the upper one, with a non-unit diagonal. Each makes
+about `m * m * m` floating-point operations per call. As for `gemm`, each call copies the shared
+`C` or `B` first.
+-/
+def level3Rows (rounds m : Nat) : IO (List Row × Nat) := do
+  let A := mat m 1
+  let C := mat m 3
+  let α (q : Nat) := 1.5 + (q - m).toFloat
+  let T : BLAS.Float64.Mat m m := .ofFn fun i j =>
+    if i.val = j.val then (m + 4 + i.val).toFloat else ((i.val * 7 + j.val * 13) % 11).toFloat - 5
+  let ts ← time rounds m fun q => (BLAS.Float64.Mat.syrk .lower (α q) A 0.5 C).data[0]!
+  let tt ← time rounds m fun q => (BLAS.Float64.Mat.syrkT .lower (α q) A 0.5 C).data[0]!
+  let tl ← time rounds m fun q => (BLAS.Float64.Mat.trsm .lower .nonUnit (α q) T C).data[0]!
+  let tr ← time rounds m fun q => (BLAS.Float64.Mat.trsmRight .upper .nonUnit (α q) T C).data[0]!
+  return ([⟨s!"syrk lower {m}", ts, none⟩, ⟨s!"syrkT lower {m}", tt, none⟩,
+    ⟨s!"trsm lower {m}", tl, none⟩, ⟨s!"trsmRight upper {m}", tr, none⟩], m * m * m)
+
+/--
+All the benchmarks: Level 1, Level 2, `gemm`, and `syrk` and `trsm`, each with its floating-point
+operations.
+-/
+public def all (rounds n : Nat) :
+    IO (List Row × List (List Row × Nat) × List (List Row × Nat) × List (List Row × Nat)) := do
   let rows ← rows rounds n
   let level2 ← level2Sizes.mapM (level2Rows rounds)
   let gemm ← gemmSizes.mapM (gemmRows rounds)
-  return (rows, level2, gemm)
+  let level3 ← level3Sizes.mapM (level3Rows rounds)
+  return (rows, level2, gemm, level3)
 
 end BLASBench.Float64

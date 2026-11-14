@@ -7,8 +7,8 @@ Basic Linear Algebra Subprograms written entirely in Lean 4, on the unboxed arra
 The routines come with proved specifications; their speed is measured, not promised.
 
 The library is at an early stage. It has, on `Float64` and `Float32`, the BLAS Level 1 routines on
-strided vectors, and `gemv`, `ger`, `trsv` and `gemm` on matrices with an offset and a leading
-dimension. The `Float32` routines are in `BLAS.Float32`, with the same names and specifications as
+strided vectors, `gemv`, `ger` and `trsv`, and `gemm`, `syrk` and `trsm` on matrices with an offset
+and a leading dimension. The `Float32` routines are in `BLAS.Float32`, with the same names and specifications as
 those of `BLAS.Float64`, on `Float32Array`.
 
 ## Usage
@@ -119,6 +119,24 @@ y[i] = d.apply (Nat.fold i (fun l _ s => s - y[l] * A[(i, l)]) x[i]) A[(i, i)]
 where `d.apply v a` is `v / a`, or `v` for a unit diagonal. For the upper triangle, the terms run
 from `l = n - 1` down to `i + 1`.
 
+The other Level 3 routines also run directly on any `Mat`, update their last argument in place
+when its array is not shared, and leave the elements outside the result unchanged:
+
+| Routine | Result | Specification |
+|---|---|---|
+| `syrk uplo α A β C` | `α * A * Aᵀ + β * C` on the triangle `uplo` of `C` | `Nat.fold k (fun l _ s => if A[(j, l)] == 0 then s else s + α * A[(j, l)] * A[(i, l)]) (betaMul β C[(i, j)])` |
+| `syrkT uplo α A β C` | `α * Aᵀ * A + β * C` on the triangle `uplo` of `C` | `α * t + β * C[(i, j)]`, or `α * t` if `β = 0`, for `t = Nat.fold k (fun l _ s => s + A[(l, i)] * A[(l, j)]) 0` |
+| `trsm uplo diag α A B` | `X` with `A * X = α * B`, over `B` | `getElem_trsm_lower`, `getElem_trsm_upper` |
+| `trsmRight uplo diag α A B` | `X` with `X * A = α * B`, over `B` | `getElem_trsmRight_upper`, `getElem_trsmRight_lower` |
+
+As in the reference `dsyrk`, `syrk` and `syrkT` only scale the triangle when `α = 0`, `syrk` skips
+the terms with `A[j, l] = 0`, so that an infinity or a `NaN` in `A` doesn't reach them, and `syrkT`
+leaves `C` unchanged when `k = 0` and `β = 1`. As in the reference `dtrsm`, `trsm` and `trsmRight`
+set `B` to `0` without reading `A` or `B` when `α = 0`, scale `B` by `α` before solving, divide by
+the diagonal, and never skip a zero of `B`. `trsm` solves each column of `B` by the loops of
+`trsv`, so its specification is that of `trsv` on the scaled column; `trsmRight` is back
+substitution along the rows, from the columns already solved.
+
 ## Conformance
 
 The target is the behavior of the reference BLAS, as in the current `master` branch of
@@ -130,13 +148,15 @@ differs from the reference BLAS, such as `iamax` counting from `0`, its document
 ## Performance
 
 Speed comes second to proofs, and it is measured rather than promised. On the machines measured
-so far, the routines match the reference BLAS on Level 1 and surpass it on Level 2, and `gemm` is
-about 4 times faster than its `dgemm`.
+so far, the routines match the reference BLAS on Level 1 and surpass it on Level 2, `gemm` is
+about 4 times faster than its `dgemm`, `trsm` up to twice as fast as its `dtrsm`, and `syrk` and
+`syrkT` about as fast as its `dsyrk`.
 
-Against OpenBLAS on one thread, we don't expect any routine to be more than about 5 times slower.
-The Level 1 updates and the Level 2 routines run at about its speed, the reductions such as `dot`
-and `iamax` at about half its speed, since their specifications fix the order of their operations,
-and `gemm` is the furthest behind. OpenBLAS runs on several threads by default, and this
+Against OpenBLAS on one thread, the Level 1 updates and the Level 2 routines run at about its speed,
+the reductions such as `dot` and `iamax` at about half its speed, since their specifications fix
+the order of their operations, `gemm` about 4 times slower, and `trsm` 2 to 7 times slower. `syrk`
+and `syrkT` are the furthest behind, 8 to 19 times slower on matrices of 256 to 1024 rows, since
+they don't have a kernel of their own like `gemm`'s yet. OpenBLAS runs on several threads by default, and this
 library runs on one, so on a multi-core machine the gap is larger. These figures are for `Float64`.
 On `Float32`, whose vectors hold twice as many elements, the reductions and `gemm` fall further
 behind OpenBLAS, to about 4 to 5 times slower. `scripts/blas_compare.py`, below, measures both
