@@ -347,4 +347,53 @@ public theorem set_modifyAt_pred (a : Float64Array) {s : Stride} {N : Nat}
   exact modifyAt_congr _ (fun _ _ _ => rfl) (fun i _ h₂ => by
     funext v; simp [show i ≠ j by lia])
 
+/-- Element `l < m` of a column window `o + l`, after a `modifyAt` of the window by `g`. -/
+public theorem getElem!_modifyAt_col (b : Float64Array) (o m : Nat) (g : Nat → Float → Float)
+    {l : Nat} (hl : l < m) :
+    (b.modifyAt (Stride.mk o 1).idx 0 m g)[o + l]! = if o + l < b.size then g l b[o + l]! else default := by
+  have e : (Stride.mk o 1).idx l = o + l := by simp [Stride.idx]
+  split
+  · rename_i h
+    have hinj : ∀ i, 0 ≤ i → i < m → ∀ j, 0 ≤ j → j < m →
+        (Stride.mk o 1).idx i = (Stride.mk o 1).idx j → i = j :=
+      fun _ _ _ _ _ _ e' => by simp only [Stride.idx] at e'; lia
+    have := getElem_modifyAt_idx b (Stride.mk o 1).idx g hinj (Nat.zero_le l) hl
+      (by rw [size_modifyAt, e]; exact h)
+    simp only [e] at this
+    rw [getElem!_pos _ _ (by rw [size_modifyAt]; exact h), getElem!_pos b _ h, this]
+  · rename_i h
+    rw [getElem!_neg _ _ (by rw [size_modifyAt]; exact h)]
+
+/-- An element outside the indices of a `modifyAt` is unchanged. -/
+public theorem getElem!_modifyAt_of_ne (b : Float64Array) (idx : Nat → Nat) {lo hi : Nat}
+    (g : Nat → Float → Float) {p : Nat} (hp : ∀ i, lo ≤ i → i < hi → idx i ≠ p) :
+    (b.modifyAt idx lo hi g)[p]! = b[p]! := by
+  by_cases h : p < b.size
+  · rw [getElem!_pos _ p (by rw [size_modifyAt]; exact h), getElem!_pos b p h,
+      getElem_modifyAt_of_forall_ne _ _ _ hp]
+  · rw [getElem!_neg _ p (by rw [size_modifyAt]; exact h), getElem!_neg b p h]
+
+/--
+Steps that each write `G i c[idx i]! c[idx' i]!` at `idx i`, where the indices `idx'` that they
+read are never written, are a `modifyAt` that reads the elements at `idx'` in the array before the
+loop.
+-/
+public theorem iterRange_set!_read (a : Float64Array) (idx idx' : Nat → Nat)
+    (G : Nat → Float → Float → Float) {lo hi : Nat}
+    (hd : ∀ i, lo ≤ i → i < hi → ∀ i', lo ≤ i' → i' < hi → idx i ≠ idx' i') :
+    iterRange (fun i c => c.set! (idx i) (G i c[idx i]! c[idx' i]!)) lo hi a =
+      a.modifyAt idx lo hi fun i v => G i v a[idx' i]! := by
+  obtain ⟨d, hd'⟩ : ∃ d, hi - lo = d := ⟨_, rfl⟩
+  induction d generalizing lo a with
+  | zero => rw [iterRange_of_le _ (by lia), modifyAt_of_le _ _ (by lia)]
+  | succ d ih =>
+    rw [iterRange_of_lt _ (by lia), modifyAt_of_lt _ _ (by lia),
+      ih _ (fun i h₁ h₂ i' h₃ h₄ => hd i (by lia) h₂ i' (by lia) h₄) (by lia)]
+    apply modifyAt_congr_fun
+    intro i v h₁ h₂
+    have hne : idx lo ≠ idx' i := hd lo (Nat.le_refl _) (by lia) i (by lia) h₂
+    by_cases hq : idx' i < a.size
+    · rw [getElem!_set!_of_lt _ _ _ hq, ite_eq_right hne]
+    · rw [getElem!_neg _ _ (by simpa using hq), getElem!_neg a _ hq]
+
 end BLAS.Float64

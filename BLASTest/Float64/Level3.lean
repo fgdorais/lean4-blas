@@ -187,3 +187,234 @@ def gemmLdInPlace (m : Nat) : Bool :=
   BLASTest.addr (Mat.gemm 1 (mat m m 1) (mat m m 2) 1 C).data == p
 
 #guard gemmLdInPlace 8
+
+/-! ## `syrk` and `syrkT` -/
+
+/-- Whether `(i, j)` is in the triangle `uplo`. -/
+def inTri (uplo : Uplo) (i j : Nat) : Bool :=
+  match uplo with
+  | .upper => i ≤ j
+  | .lower => j ≤ i
+
+/-- The loops of the reference BLAS for `syrk`, with `trans = 'N'`, on an `Array`. -/
+def syrkRef (uplo : Uplo) (α : Float) (A : Mat n k) (β : Float) (C : Mat n n) : List Float :=
+  Id.run do
+  let mut c := C.toList.toArray
+  if n == 0 || ((α == 0 || k == 0) && β == 1) then return c.toList
+  let rows (j : Nat) := (List.range n).filter (inTri uplo · j)
+  if α == 0 then
+    for j in List.range n do
+      for i in rows j do
+        c := c.set! (i + n * j) (if β == 0 then 0 else β * c[i + n * j]!)
+    return c.toList
+  for j in List.range n do
+    if β == 0 then
+      for i in rows j do c := c.set! (i + n * j) 0
+    else if β != 1 then
+      for i in rows j do c := c.set! (i + n * j) (β * c[i + n * j]!)
+    for l in List.range k do
+      let ajl := A[(j, l)]?.getD 0
+      if ajl != 0 then
+        let t := α * ajl
+        for i in rows j do
+          c := c.set! (i + n * j) (c[i + n * j]! + t * (A[(i, l)]?.getD 0))
+  return c.toList
+
+/-- The loops of the reference BLAS for `syrk`, with `trans = 'T'`, on an `Array`. -/
+def syrkTRef (uplo : Uplo) (α : Float) (A : Mat k n) (β : Float) (C : Mat n n) : List Float :=
+  Id.run do
+  let mut c := C.toList.toArray
+  if n == 0 || ((α == 0 || k == 0) && β == 1) then return c.toList
+  let rows (j : Nat) := (List.range n).filter (inTri uplo · j)
+  if α == 0 then
+    for j in List.range n do
+      for i in rows j do
+        c := c.set! (i + n * j) (if β == 0 then 0 else β * c[i + n * j]!)
+    return c.toList
+  for j in List.range n do
+    for i in rows j do
+      let mut t : Float := 0
+      for l in List.range k do
+        t := t + (A[(l, i)]?.getD 0) * (A[(l, j)]?.getD 0)
+      c := c.set! (i + n * j) (if β == 0 then α * t else α * t + β * c[i + n * j]!)
+  return c.toList
+
+/--
+Whether `syrk` and `syrkT` match the reference loops, on packed operands and on operands with
+offsets and leading dimensions, and leave the rest of `C`'s array unchanged.
+-/
+def syrkMatches (n k : Nat) (uplo : Uplo) (α β : Float) : Bool :=
+  let ok₁ := (Mat.syrk uplo α (mat n k 1) β (mat n n 3)).toList ==
+    syrkRef uplo α (mat n k 1) β (mat n n 3)
+  let ok₂ := (Mat.syrkT uplo α (mat k n 1) β (mat n n 3)).toList ==
+    syrkTRef uplo α (mat k n 1) β (mat n n 3)
+  let C := matLd n n 4 (n + 3) 3
+  let D := Mat.syrk uplo α (matLd n k 3 (n + 2) 1) β C
+  let E := Mat.syrkT uplo α (matLd k n 1 (k + 1) 1) β C
+  ok₁ && ok₂ && D.toList == syrkRef uplo α (mat n k 1) β (mat n n 3) &&
+    E.toList == syrkTRef uplo α (mat k n 1) β (mat n n 3) &&
+    outside D == outside C && outside E == outside C
+
+#guard [Uplo.lower, .upper].all fun u =>
+  syrkMatches 5 3 u 1.5 0.5 && syrkMatches 1 1 u 2 3 && syrkMatches 17 13 u (-0.25) 2 &&
+    syrkMatches 40 7 u 1 1 && syrkMatches 5 3 u 0 0.5 && syrkMatches 5 3 u 1.5 0 &&
+    syrkMatches 5 3 u 0 0 && syrkMatches 5 3 u 0 1 && syrkMatches 0 3 u 1 1 &&
+    syrkMatches 3 0 u 1 1 && syrkMatches 3 0 u 2 0.5
+
+-- `[[1, 2], [3, 4]] * [[1, 2], [3, 4]]ᵀ = [[5, 11], [11, 25]]`, on the lower triangle.
+#guard
+  let A : Mat 2 2 := .ofPMat ⟨.ofList [1, 3, 2, 4], by decide⟩
+  let C : Mat 2 2 := .ofPMat ⟨.ofList [0, 0, 7, 0], by decide⟩
+  (Mat.syrk .lower 1 A 0 C).toList == [5, 11, 7, 25] &&
+    (Mat.syrkT .upper 1 A 0 C).toList == [10, 0, 14, 20]
+
+-- `syrk` skips the terms with `A[j, l] = 0`, so the infinity in `A[1, 0]` doesn't reach `C[1, 0]`.
+#guard
+  let A : Mat 2 1 := .ofPMat ⟨.ofList [0, 1 / 0], by decide⟩
+  let C := Mat.syrk .lower 1 A 1 (mat 2 2 3)
+  C[(1, 0)] == (mat 2 2 3)[(1, 0)] && C[(1, 1)] == 1 / 0
+
+-- `syrkT` leaves `C` unchanged when `k = 0` and `β = 1`, even a `-0`.
+#guard
+  let C : Mat 1 1 := .ofFn fun _ _ => -0
+  (Mat.syrkT .upper 2 (mat 0 1) 1 C)[(0, 0)].toBits == (-0 : Float).toBits
+
+-- `β = 0` sets the triangle to `0` without reading it, and `α = 0` doesn't read `A`.
+#guard
+  let nan : Float := 0 / 0
+  let C : Mat 2 2 := .ofFn fun _ _ => nan
+  let A : Mat 2 2 := .ofFn fun _ _ => nan
+  (Mat.syrk .lower 0 A 0 C)[(1, 0)] == 0 && (Mat.syrkT .upper 0 A 0 C)[(0, 1)] == 0 &&
+    (Mat.syrkT .upper 2 (mat 2 2) 0 C)[(0, 1)] == (2 : Float) * (Mat.syrkT .upper 1 (mat 2 2) 0 C)[(0, 1)]
+
+/-- Whether `syrk` and `syrkT` update an unshared `C` in place. -/
+def syrkInPlace (n : Nat) : Bool :=
+  let (p, C) := withAddr (matLd n n 2 (n + 1) 3)
+  let (q, C') := withAddr (mat n n 3)
+  BLASTest.addr (Mat.syrk .lower 1 (mat n 5 1) 1 C).data == p &&
+    BLASTest.addr (Mat.syrkT .upper 1 (mat 5 n 1) 1 C').data == q
+
+#guard syrkInPlace 8
+
+/-! ## `trsm` and `trsmRight` -/
+
+/-- A matrix with the elements of `mat n n s` in the triangle `uplo`, `n + 4 + i` on the diagonal,
+and `other` elsewhere. -/
+def triM (n : Nat) (s : Nat := 0) (other : Float := 0) (uplo : Uplo := .lower) : Mat n n :=
+  .ofFn fun i j =>
+    if i.val = j.val then (n + 4 + i.val).toFloat
+    else if inTri uplo i.val j.val then ((i.val * 7 + j.val * 13 + s) % 11).toFloat - 5
+    else other
+
+/-- The loops of the reference BLAS for `trsm`, with `side = 'L'` and `transa = 'N'`. -/
+def trsmRef (uplo : Uplo) (d : Diag) (α : Float) (A : Mat m m) (B : Mat m n) : List Float :=
+  Id.run do
+  let mut b := B.toList.toArray
+  if m == 0 || n == 0 then return b.toList
+  if α == 0 then return b.toList.map fun _ => 0
+  let a (i j : Nat) := A[(i, j)]?.getD 0
+  for j in List.range n do
+    for i in List.range m do b := b.set! (i + m * j) (α * b[i + m * j]!)
+    match uplo with
+    | .upper =>
+      for k in (List.range m).reverse do
+        if d == .nonUnit then b := b.set! (k + m * j) (b[k + m * j]! / a k k)
+        for i in List.range k do
+          b := b.set! (i + m * j) (b[i + m * j]! - b[k + m * j]! * a i k)
+    | .lower =>
+      for k in List.range m do
+        if d == .nonUnit then b := b.set! (k + m * j) (b[k + m * j]! / a k k)
+        for i in (List.range m).filter (k < ·) do
+          b := b.set! (i + m * j) (b[i + m * j]! - b[k + m * j]! * a i k)
+  return b.toList
+
+/-- The loops of the reference BLAS for `trsm`, with `side = 'R'` and `transa = 'N'`. -/
+def trsmRightRef (uplo : Uplo) (d : Diag) (α : Float) (A : Mat n n) (B : Mat m n) :
+    List Float := Id.run do
+  let mut b := B.toList.toArray
+  if m == 0 || n == 0 then return b.toList
+  if α == 0 then return b.toList.map fun _ => 0
+  let a (i j : Nat) := A[(i, j)]?.getD 0
+  let cols := match uplo with
+    | .upper => List.range n
+    | .lower => (List.range n).reverse
+  for j in cols do
+    for i in List.range m do b := b.set! (i + m * j) (α * b[i + m * j]!)
+    let ks := match uplo with
+      | .upper => List.range j
+      | .lower => (List.range n).filter (j < ·)
+    for k in ks do
+      for i in List.range m do
+        b := b.set! (i + m * j) (b[i + m * j]! - a k j * b[i + m * k]!)
+    if d == .nonUnit then
+      for i in List.range m do b := b.set! (i + m * j) (b[i + m * j]! / a j j)
+  return b.toList
+
+/-- `A` with `NaN`s outside the triangle `uplo`, and on the diagonal when it is unit. -/
+def withNaNs (uplo : Uplo) (d : Diag) (n : Nat) : Mat n n :=
+  let nan : Float := 0 / 0
+  let A := triM n 1 nan uplo
+  match d with
+  | .nonUnit => A
+  | .unit => .ofFn fun i j => if i.val = j.val then nan else A[(i.val, j.val)]
+
+/-- `A` at the offset `2` with the leading dimension `n + 3`, in an array of `1e9 + 0.5`. -/
+def ldOf (A : Mat n n) : Mat n n :=
+  (Mat.ofLd? (Mat.ofFn (m := n + 3) (n := n) fun i j =>
+    if h : i.val < n then A[(i.val, j.val)]'⟨h, j.isLt⟩ else 1e9 + 0.5).data 0 (n + 3)).getD A
+
+/--
+Whether `trsm` and `trsmRight` match the reference loops, on packed operands and on operands with
+offsets and leading dimensions, don't read the other triangle (nor the diagonal when it is unit),
+and leave the rest of `B`'s array unchanged.
+-/
+def trsmMatches (m n : Nat) (uplo : Uplo) (d : Diag) (α : Float) : Bool :=
+  let A := triM m 1 0 uplo
+  let A' := triM n 1 0 uplo
+  let B := mat m n 2
+  let B' := matLd m n 3 (m + 2) 2
+  let X := Mat.trsm uplo d α (ldOf (withNaNs uplo d m)) B'
+  let Y := Mat.trsmRight uplo d α (ldOf (withNaNs uplo d n)) B'
+  (Mat.trsm uplo d α A B).toList == trsmRef uplo d α A B &&
+    (Mat.trsmRight uplo d α A' B).toList == trsmRightRef uplo d α A' B &&
+    X.toList == trsmRef uplo d α A B && Y.toList == trsmRightRef uplo d α A' B &&
+    outside X == outside B' && outside Y == outside B'
+
+#guard [Uplo.lower, .upper].all fun u => [Diag.unit, .nonUnit].all fun d =>
+  trsmMatches 5 3 u d 1.5 && trsmMatches 1 1 u d 2 && trsmMatches 17 9 u d (-0.25) &&
+    trsmMatches 40 33 u d 1 && trsmMatches 0 3 u d 1 && trsmMatches 3 0 u d 1 &&
+    trsmMatches 5 3 u d 0
+
+-- `α = 0` sets `B` to `0` without reading `A` or `B`.
+#guard
+  let nan : Float := 0 / 0
+  let B : Mat 2 2 := .ofFn fun _ _ => nan
+  let A : Mat 2 2 := .ofFn fun _ _ => nan
+  (Mat.trsm .lower .nonUnit 0 A B).toList == [0, 0, 0, 0] &&
+    (Mat.trsmRight .upper .unit 0 A B).toList == [0, 0, 0, 0]
+
+/-- The residuals `A * X - α * B` and `X * A - α * B` of the solves, by `gemm`: zero up to
+rounding. -/
+def trsmResidual (n : Nat) (uplo : Uplo) : Float :=
+  let A := triM n 1 0 uplo
+  let B := mat n 4 2
+  let X := Mat.trsm uplo .nonUnit 2 A B
+  let Y := Mat.trsmRight uplo .nonUnit 2 (triM 4 1 0 uplo) B
+  let r := Mat.gemm 1 A X (-2) B
+  let s := Mat.gemm 1 Y (triM 4 1 0 uplo) (-2) B
+  (r.toList ++ s.toList).foldl (fun s v => max s v.abs) 0
+
+#guard trsmResidual 50 .lower < 1e-12 && trsmResidual 50 .upper < 1e-12
+
+/-- Whether `trsm` and `trsmRight` update an unshared `B` in place. -/
+def trsmInPlace (n : Nat) : Bool :=
+  let (p, B) := withAddr (matLd n n 2 (n + 1) 3)
+  let (q, B') := withAddr (mat n n 3)
+  let (r, B'') := withAddr (mat n n 4)
+  let (s, B₃) := withAddr (mat n n 5)
+  BLASTest.addr (Mat.trsm .lower .nonUnit 1 (triM n) B).data == p &&
+    BLASTest.addr (Mat.trsm .upper .unit 2 (triM n 0 0 .upper) B₃).data == s &&
+    BLASTest.addr (Mat.trsmRight .upper .unit 2 (triM n 0 0 .upper) B').data == q &&
+    BLASTest.addr (Mat.trsmRight .lower .nonUnit 2 (triM n) B'').data == r
+
+#guard trsmInPlace 8

@@ -10,13 +10,26 @@ Changes that would reorder them, such as partial sums in `dot`, `asum` and `nrm2
 
 ## `gemm` (4–5× behind)
 
-- [ ] A wider register kernel than two columns of `C` and four terms, such as four columns and four
-  terms, so that each load of `A` feeds more products. Each element keeps its order of terms, so
-  `gemm_eq_gemmNaive` still holds.
+- Measured, not worth it: wider kernels. In C prototypes in the exact order, a sweep of four
+  columns and four terms runs at the speed of the current two columns and four terms (about 20
+  GFLOP/s), and register tiles that carry 16 or 32 accumulators across the terms, which would need
+  `inplace` loops with more than four variables, run at 5–9 GFLOP/s, slower than the current
+  kernel: each accumulator is one chain of dependent additions.
 - [ ] Revisit packing `A` and `B` with a wider kernel. Packing the 256 × 128 block of `A` measured
   within noise with the current kernel.
 - [ ] Parallel `gemm` over blocks of columns of `C`, with `Task`. Each column is independent, so
   the result stays the same to the bit. OpenBLAS on 4 threads is 10–18× ahead.
+
+## `syrk` and `trsm` (8–19× and 2–7× behind at 256–1024)
+
+- [ ] `syrkT`: compute four elements of a column at a time, which share the reads of column `j` of
+  `A` and give four independent chains of additions, as `gemvT` does with four columns. A C
+  prototype in the exact order runs 2× faster with four, and no faster with eight or sixteen.
+- [ ] `syrk`: sweep the rows of a block for several terms at a time, as `gemm` does. Each element
+  keeps its order of terms, including the skipped ones.
+- [ ] `trsm`, `trsmRight`: update the rest of `B` by the `gemm` kernel after each block of solved
+  rows or columns. This changes the order of the updates of an element only if the blocks reorder
+  its terms, so it needs care to stay exact.
 
 ## `iamax` (about 2× behind)
 
