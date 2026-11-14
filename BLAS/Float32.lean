@@ -17,3 +17,9 @@ public import BLAS.Float32.Level3
 public import BLAS.Float32.GemmBlocked
 public import BLAS.Float32.Gemm
 public import BLAS.Float32.Trsm
+
+/-!
+# BLAS on `Float32`
+
+The routines on vectors and matrices of `Float32`, stored in `Float32Array`s.
+-/

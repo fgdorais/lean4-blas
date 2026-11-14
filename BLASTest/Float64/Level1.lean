@@ -9,6 +9,10 @@ import BLASTest.Util
 meta import BLAS
 meta import BLASTest.Util
 
+/-!
+Tests for the Level 1 routines on `Float`: updates, rotations and reductions.
+-/
+
 open BLAS.Float64
 
 /-- The vector `[0, 1, …, n - 1]` scaled by `c`. -/
@@ -22,8 +26,10 @@ goes on to a routine, and doesn't keep the array alive past it.
 
 /-! ## `axpy` -/
 
-#guard (Vec.axpy 2 (.ofList (n := 3) [1, 2, 3]) (.ofList (n := 3) [10, 20, 30])).toList == [12, 24, 36]
-#guard (Vec.axpy 0 (.ofList (n := 3) [1, 2, 3]) (.ofList (n := 3) [10, 20, 30])).toList == [10, 20, 30]
+#guard (Vec.axpy 2 (.ofList (n := 3) [1, 2, 3]) (.ofList (n := 3) [10, 20, 30])).toList ==
+  [12, 24, 36]
+#guard (Vec.axpy 0 (.ofList (n := 3) [1, 2, 3]) (.ofList (n := 3) [10, 20, 30])).toList ==
+  [10, 20, 30]
 #guard (Vec.axpy (-1) (ramp 4) (ramp 4)).toList == [0, 0, 0, 0]
 #guard (Vec.axpy 3 (ramp 0) (ramp 0)).toList == []
 
@@ -112,7 +118,8 @@ def copyInPlace (n : Nat) : Bool :=
 #guard Vec.nrm2 (ramp 0) == 0
 
 -- `nrm2` scales big and small elements, so it overflows or underflows only when the norm does.
-#guard Vec.nrm2 (.ofList (n := 2) [Float.scaleB 3 600, Float.scaleB (-4) 600]) == Float.scaleB 5 600
+#guard Vec.nrm2 (.ofList (n := 2) [Float.scaleB 3 600, Float.scaleB (-4) 600]) ==
+  Float.scaleB 5 600
 #guard Vec.nrm2 (.ofList (n := 2) [Float.scaleB 3 (-600), Float.scaleB 4 (-600)]) ==
   Float.scaleB 5 (-600)
 #guard Vec.nrm2 (.ofList (n := 3) [Float.scaleB 3 1020, Float.scaleB 4 1020, 1]) ==
@@ -130,13 +137,18 @@ def copyInPlace (n : Nat) : Bool :=
   let n := 70000
   let x := ramp n 0.1
   let y := ramp n 0.3
-  Vec.dot x y == (List.range n).foldl (fun s i => s + (0.1 * i.toFloat) * (0.3 * i.toFloat)) 0 &&
+  Vec.dot x y ==
+    (List.range n).foldl (fun s i => s + (0.1 * i.toFloat) * (0.3 * i.toFloat)) 0 &&
   Vec.asum x == (List.range n).foldl (fun s i => s + (0.1 * i.toFloat).abs) 0
 
 #guard Vec.iamax (.ofList (n := 4) [1, -5, 5, 2]) == 1
 #guard Vec.iamax (.ofList (n := 3) [0, 0, 0]) == 0
-#guard Vec.iamax (ramp 0) == 0
-#guard Vec.iamax (ramp 70000) == 69999
+#guard Vec.iamax! (ramp 0) == 0
+#guard Vec.iamax? (ramp 0) == none
+#guard Vec.iamax! (ramp 70000) == 69999
+#guard Vec.iamax? (ramp 70000) == some 69999
+#guard Vec.iamax! (.ofList (n := 4) [1, -5, 5, 2]) == 1
+#guard Vec.iamax? (.ofList (n := 4) [1, -5, 5, 2]) == some 1
 #guard Vec.iamax (.ofList (n := 3) [0 / 0, 5, 7]) == 0
 -- As in the reference BLAS (after LAPACK 3.12.1), the first `NaN` wins.
 #guard Vec.iamax (.ofList (n := 3) [1, 0 / 0, 7]) == 1
@@ -199,7 +211,8 @@ def axpyInPlaceStrided (n : Nat) : Bool :=
 
 #guard
   let (x, y) := Vec.rot 0.6 0.8 (.ofList (n := 2) [1, 2]) (.ofList (n := 2) [3, 4])
-  x.toList == [0.6 * 1 + 0.8 * 3, 0.6 * 2 + 0.8 * 4] && y.toList == [0.6 * 3 - 0.8 * 1, 0.6 * 4 - 0.8 * 2]
+  x.toList == [0.6 * 1 + 0.8 * 3, 0.6 * 2 + 0.8 * 4] &&
+    y.toList == [0.6 * 3 - 0.8 * 1, 0.6 * 4 - 0.8 * 2]
 -- Both new elements come from the old ones.
 #guard
   let (x, y) := Vec.rot 0 1 (ramp 4) (ramp 4 2)

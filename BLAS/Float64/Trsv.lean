@@ -166,7 +166,8 @@ public theorem trsvLowerData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
       have hsz := Nat.lt_of_le_of_lt x.le_size hs.2
       rw [Tail.run_forInFrom_modify (idx := (x.stride.shift (j.toNat + 1)).idx)
         (he := fun k _ hk => x.toNat_index_shift hs.2 (by lia))
-        (G := fun k v => v - d.apply a[x.off + x.inc * j.toNat]! A.data[A.off + A.ld * j.toNat + j.toNat]! *
+        (G := fun k v => v -
+          d.apply a[x.off + x.inc * j.toNat]! A.data[A.off + A.ld * j.toNat + j.toNat]! *
           A.data[A.off + A.ld * j.toNat + (j.toNat + 1 + k)]!)]
       · congr 1
         rw [trsvLowerStep, hr, USize.toNat_zero, set_modifyAt_succ _ x.stride _ _ hj _ hp]
@@ -175,12 +176,15 @@ public theorem trsvLowerData_eq_iterRange (d : Diag) (A : Mat n n) (x : Vec n) :
         split
         · rename_i hi
           subst hi
-          simp only [uget_eq_getElem, getElem_def, hp, getElem!_pos a (x.off + x.inc * j.toNat) (show _ < a.size by rw [h]; exact x.index_lt hj),
+          simp only [uget_eq_getElem, getElem_def, hp,
+            getElem!_pos a (x.off + x.inc * j.toNat)
+              (show _ < a.size by rw [h]; exact x.index_lt hj),
             getElem!_pos A.data (A.off + A.ld * j.toNat + j.toNat) (A.index_lt hj hj)]
         · rw [show j.toNat + 1 + (i - (j.toNat + 1)) = i by lia]
       · intro k _ hk v
         rw [hr] at hk
-        simp only [uget_eq_getElem, getElem_def, hp, getElem!_pos a (x.off + x.inc * j.toNat) (show _ < a.size by rw [h]; exact x.index_lt hj),
+        simp only [uget_eq_getElem, getElem_def, hp,
+          getElem!_pos a (x.off + x.inc * j.toNat) (show _ < a.size by rw [h]; exact x.index_lt hj),
           show (j + 1 + k).toNat = j.toNat + 1 + k.toNat by grind]
         rw [getElem!_pos A.data (A.off + A.ld * j.toNat + j.toNat) (A.index_lt hj hj),
           getElem!_pos A.data (A.off + A.ld * j.toNat + (j.toNat + 1 + k.toNat))

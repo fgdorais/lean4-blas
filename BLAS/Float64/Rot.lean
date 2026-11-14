@@ -165,10 +165,14 @@ namespace Rotg
 @[inline, expose] public def sign1 (x : Float) : Float :=
   if x.toBits >>> 63 == 0 then 1 else -1
 
-/-- Fortran's `max` of two values as gfortran compiles it: the first unless the second is greater. -/
+/--
+Fortran's `max` of two values as gfortran compiles it: the first unless the second is greater.
+-/
 @[inline, expose] public def fmax (a b : Float) : Float := if b > a then b else a
 
-/-- Fortran's `min` of two values as gfortran compiles it: the first unless the second is smaller. -/
+/--
+Fortran's `min` of two values as gfortran compiles it: the first unless the second is smaller.
+-/
 @[inline, expose] public def fmin (a b : Float) : Float := if b < a then b else a
 
 end Rotg
@@ -204,7 +208,9 @@ namespace Rotmg
 /-- The reference's `GAMSQ`, the literal `16777216.D0`, which is `gam * gam`. -/
 @[expose] public def gamsq : Float := 16777216
 
-/-- The reference's `RGAMSQ`, the literal `5.9604645D-8` (close to, but not exactly, `1 / gamsq`). -/
+/--
+The reference's `RGAMSQ`, the literal `5.9604645D-8` (close to, but not exactly, `1 / gamsq`).
+-/
 @[expose] public def rgamsq : Float := 5.9604645e-8
 
 /-- The state of `rotmg`: the flag, `H`, and the scaled `d1`, `d2`, `x1`. -/
@@ -218,7 +224,9 @@ public structure State where
   d2 : Float
   x1 : Float
 
-/-- The reference's reset when the rotation does not exist: flag `-1`, `H = 0`, `d1 = d2 = x1 = 0`. -/
+/--
+The reference's reset when the rotation does not exist: flag `-1`, `H = 0`, `d1 = d2 = x1 = 0`.
+-/
 @[expose] public def State.zero : State :=
   { flag := -1, h11 := 0, h21 := 0, h12 := 0, h22 := 0, d1 := 0, d2 := 0, x1 := 0 }
 

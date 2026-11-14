@@ -146,8 +146,8 @@ updates `C` in place when `C` is packed and its array is not shared. It leaves t
 when `β = 0`, before adding the products, and only scales `C` when `α = 0`, without reading `A` or
 `B`.
 -/
-@[expose] public def gemmNaive (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n) :
-    Mat m n :=
+@[expose] public def gemmNaive (α : Float) (A : Mat m k) (B : Mat k n) (β : Float)
+    (C : Mat m n) : Mat m n :=
   if α == 0 then
     { data := C.scalBetaData β
       off := C.off
@@ -179,7 +179,8 @@ theorem gemmData_eq (α β : Float) (f : PMat m k → PMat k n → PMat m n → 
       simp [gemmAt, gemmEntry, hi, hj, hα, getElem_def]
 
 /-- The array of `gemmNaive α A B β C` is the array of `C` with its elements updated. -/
-public theorem data_gemmNaive (α : Float) (A : Mat m k) (B : Mat k n) (β : Float) (C : Mat m n) :
+public theorem data_gemmNaive (α : Float) (A : Mat m k) (B : Mat k n) (β : Float)
+    (C : Mat m n) :
     (gemmNaive α A B β C).data = mapMat C.data C.off C.ld m 0 n (gemmAt α A B β C) := by
   rw [← gemmData_eq α β _ (fun P Q R i j h => PMat.getElem_gemm α P Q β R i j h) A B C]
   unfold gemmNaive; split <;> simp_all

@@ -47,10 +47,14 @@ public def sweep4 (a c : Float32Array) (cj cj' a₀ a₁ a₂ a₃ len : USize)
       c[cj' + i] := c[cj' + i] + s₀ * x₀ + s₁ * x₁ + s₂ * x₂ + s₃ * x₃
   then fun _ c' h => ⟨c', h⟩
 
-/-- `sweep4` with one term: adds `t * a[al + i]` to `c[cj + i]` and `s * a[al + i]` to `c[cj' + i]`. -/
+/--
+`sweep4` with one term: adds `t * a[al + i]` to `c[cj + i]` and `s * a[al + i]` to
+`c[cj' + i]`.
+-/
 public def sweep2 (a c : Float32Array) (cj cj' al len : USize)
     (hc : cj.toNat + len.toNat ≤ c.size) (hc' : cj'.toNat + len.toNat ≤ c.size)
-    (ha : al.toNat + len.toNat ≤ a.size) (t s : Float32) : {c' : Float32Array // c'.size = c.size} :=
+    (ha : al.toNat + len.toNat ≤ a.size) (t s : Float32) :
+    {c' : Float32Array // c'.size = c.size} :=
   inplace c do
     for i in 0...len do
       let x := a.uget (al + i) (Notation.toNat_add_lt_of_window ha (by lia))
@@ -410,7 +414,8 @@ variable {m n k : Nat}
 /-- The element `(i, j)` of `gemm α A B β C` after its first `L` terms. -/
 def gemmPartial (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32) (C : PMat m n)
     (i j L : Nat) : Float32 :=
-  Nat.fold L (fun l _ s => s + α * B.data[l + k * j]! * A.data[i + m * l]!) (betaMul β C.data[i + m * j]!)
+  Nat.fold L (fun l _ s => s + α * B.data[l + k * j]! * A.data[i + m * l]!)
+    (betaMul β C.data[i + m * j]!)
 
 theorem gemmPartial_succ (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32) (C : PMat m n)
     (i j L : Nat) : gemmPartial α A B β C i j (L + 1) =
@@ -919,7 +924,8 @@ theorem GemmInv.betaPass (α : Float32) (A : PMat m k) (B : PMat k n) (β : Floa
     · rw [getElem!_neg c _ hc, getElem!_neg _ _ (by rw [hsz]; exact hc)]
 
 /-- `gemmBlocked` computes `gemm`, with the same result to the bit. -/
-public theorem gemmBlocked_eq (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32) (C : PMat m n) :
+public theorem gemmBlocked_eq (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32)
+    (C : PMat m n) :
     gemmBlocked α A B β C = gemmModel α A B β C := by
   unfold gemmBlocked
   split
@@ -943,7 +949,8 @@ public theorem gemmBlocked_eq (α : Float32) (A : PMat m k) (B : PMat k n) (β :
       rfl
     · intro j _ hj next a h
       rw [hnu] at hj
-      rw [Tail.run_forInFrom_unit (F := fun i c => c.set! (m * j.toNat + i) (betaMul β c[m * j.toNat + i]!))
+      rw [Tail.run_forInFrom_unit
+          (F := fun i c => c.set! (m * j.toNat + i) (betaMul β c[m * j.toNat + i]!))
           (hF := by simp)]
       · simp only [USize.toNat_zero, hmu, betaPass]
       · intro i _ hi next' a' h'
@@ -964,7 +971,8 @@ public theorem gemmBlocked_eq (α : Float32) (A : PMat m k) (B : PMat k n) (β :
     (gemmBlocked α A B β C)[(i, j)] = gemmEntry α A B β C i j h.1 h.2 := by
   rw [gemmBlocked_eq, ← gemm_eq, getElem_gemm]
 
-public theorem gemmBlocked_eq_gemm (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32) (C : PMat m n) :
+public theorem gemmBlocked_eq_gemm (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32)
+    (C : PMat m n) :
     gemmBlocked α A B β C = gemm α A B β C := by
   rw [gemmBlocked_eq, gemm_eq]
 
