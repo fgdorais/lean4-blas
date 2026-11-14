@@ -80,8 +80,8 @@ lemmas, goes in `BLAS/Internal.lean` instead.
 
 - Routines keep the names of the reference BLAS without the precision prefix: `axpy`, `gemv`,
   `trsm`. Variants with a transposed or right-hand argument add a suffix: `gemvT`, `trsmRight`.
-- `foo?` returns an `Option`, and `foo!` returns a default value instead: `iamax?` is `none` for
-  the empty vector and `iamax!` is `0`, while `iamax` takes a proof that the vector is nonempty.
+- `foo?` returns an `Option`, and `foo!` may panic on bad input: `iamax?` is `none` for the empty
+  vector and `iamax!` is `0`, while `iamax` takes a proof that the vector is nonempty.
 
 ## Commits and pull requests
 
