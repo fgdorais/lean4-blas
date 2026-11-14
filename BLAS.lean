@@ -5,7 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import ScalarArray
-public import ScalarArray.InPlaceSyntax
+public import ScalarArray.Notation
 public import BLAS.Float64
 public import BLAS.Float32
 

@@ -39,10 +39,10 @@ public def sweep4 (a c : Float64Array) (cj cj' a₀ a₁ a₂ a₃ len : USize)
     (t₀ t₁ t₂ t₃ s₀ s₁ s₂ s₃ : Float) : {c' : Float64Array // c'.size = c.size} :=
   inplace c do
     for i in 0...len do
-      let x₀ := a.uget (a₀ + i) (InPlaceSyntax.toNat_add_lt_of_window h₀ (by lia))
-      let x₁ := a.uget (a₁ + i) (InPlaceSyntax.toNat_add_lt_of_window h₁ (by lia))
-      let x₂ := a.uget (a₂ + i) (InPlaceSyntax.toNat_add_lt_of_window h₂ (by lia))
-      let x₃ := a.uget (a₃ + i) (InPlaceSyntax.toNat_add_lt_of_window h₃ (by lia))
+      let x₀ := a.uget (a₀ + i) (Notation.toNat_add_lt_of_window h₀ (by lia))
+      let x₁ := a.uget (a₁ + i) (Notation.toNat_add_lt_of_window h₁ (by lia))
+      let x₂ := a.uget (a₂ + i) (Notation.toNat_add_lt_of_window h₂ (by lia))
+      let x₃ := a.uget (a₃ + i) (Notation.toNat_add_lt_of_window h₃ (by lia))
       c[cj + i] := c[cj + i] + t₀ * x₀ + t₁ * x₁ + t₂ * x₂ + t₃ * x₃
       c[cj' + i] := c[cj' + i] + s₀ * x₀ + s₁ * x₁ + s₂ * x₂ + s₃ * x₃
   then fun _ c' h => ⟨c', h⟩
@@ -53,7 +53,7 @@ public def sweep2 (a c : Float64Array) (cj cj' al len : USize)
     (ha : al.toNat + len.toNat ≤ a.size) (t s : Float) : {c' : Float64Array // c'.size = c.size} :=
   inplace c do
     for i in 0...len do
-      let x := a.uget (al + i) (InPlaceSyntax.toNat_add_lt_of_window ha (by lia))
+      let x := a.uget (al + i) (Notation.toNat_add_lt_of_window ha (by lia))
       c[cj + i] := c[cj + i] + t * x
       c[cj' + i] := c[cj' + i] + s * x
   then fun _ c' h => ⟨c', h⟩
@@ -65,7 +65,7 @@ public def sweep1 (a c : Float64Array) (cj al len : USize)
   inplace c do
     for i in 0...len do
       c[cj + i] := c[cj + i] +
-        t * a.uget (al + i) (InPlaceSyntax.toNat_add_lt_of_window ha (by lia))
+        t * a.uget (al + i) (Notation.toNat_add_lt_of_window ha (by lia))
   then fun _ c' h => ⟨c', h⟩
 
 theorem getElem!_sweep4 (a c : Float64Array) (cj cj' a₀ a₁ a₂ a₃ len hc hc' h₀ h₁ h₂ h₃)
@@ -217,21 +217,21 @@ public def gemmPairTerms (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFi
       (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw)
       (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw)
       (α * B.data.uget (k.toUSize * j + l)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * j + p₁)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * j + p₂)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * j + p₃)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * (j + 1) + l)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * (j + 1) + p₁)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * (j + 1) + p₂)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * (j + 1) + p₃)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
     gemmPairTerms α A B hs j hj i₀ len hw (p₃ + 1) l₁ (by rw [hp₄]; lia) hl₁ c'.1
       (by rw [c'.2, hc])
   else if h1 : l < l₁ then
@@ -241,9 +241,9 @@ public def gemmPairTerms (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFi
       rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw
     let c' := sweep2 A.data c (m.toUSize * j + i₀) (m.toUSize * (j + 1) + i₀)
       (m.toUSize * l + i₀) len hcj hcj' ha
-      (α * B.data.uget (k.toUSize * j + l) (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+      (α * B.data.uget (k.toUSize * j + l) (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * (j + 1) + l)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
     gemmPairTerms α A B hs j hj i₀ len hw (l + 1) l₁ (by rw [hl1]; lia) hl₁ c'.1
       (by rw [c'.2, hc])
   else ⟨c, hc⟩
@@ -273,7 +273,7 @@ public def gemmColTerms (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFit
       (by rw [hc]; exact toNat_mul_add_add_le hmu (by lia) hw)
       (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw)
       (α * B.data.uget (k.toUSize * j + l)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
     gemmColTerms α A B hs j hj i₀ len hw (l + 1) l₁ (by rw [hl1]; lia) hl₁ c'.1
       (by rw [c'.2, hc])
   else ⟨c, hc⟩

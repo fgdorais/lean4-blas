@@ -6,7 +6,7 @@ module
 
 public import BLAS.Float64.PMat
 public import BLAS.Float64.Loop
-public import ScalarArray.InPlaceSyntax
+public import ScalarArray.Notation
 import all BLAS.Internal
 
 /-!
@@ -85,10 +85,10 @@ public def gemm (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMa
           let bj := ku * j
           have hbj : bj.toNat + ku.toNat ≤ b.size :=
             toNat_mul_add_le (n := n) (by lia) (by rw [hku, hb]; exact Nat.le_refl _)
-          let t := α * b.uget (bj + l) (InPlaceSyntax.toNat_add_lt_of_window hbj (by lia))
+          let t := α * b.uget (bj + l) (Notation.toNat_add_lt_of_window hbj (by lia))
           for i in 0...mu do
             c[cj + i] := c[cj + i] +
-              t * a.uget (al + i) (InPlaceSyntax.toNat_add_lt_of_window hal (by lia))
+              t * a.uget (al + i) (Notation.toNat_add_lt_of_window hal (by lia))
     then fun _ c' h => ⟨c', by rw [h, hc]⟩
   else gemmModel α A B β C
 

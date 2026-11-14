@@ -6,7 +6,7 @@ module
 
 public import BLAS.Float32.Vec
 public import BLAS.Float32.Loop
-public import ScalarArray.InPlaceSyntax
+public import ScalarArray.Notation
 
 /-!
 # Level 1
@@ -99,29 +99,35 @@ public theorem axpyData_eq (α : Float32) (x y : Vec n) :
   · rfl
 
 /--
-`axpy α x y` is `α * x + y`. It updates `y` in place when its array is not shared, and leaves the
-elements of the array outside `y` unchanged.
+`axpy α x y` is `α * x + y`. As in the reference BLAS, it returns `y` when `α = 0`, without
+reading `x`, so an infinity or a `NaN` in `x` doesn't reach `y`. It updates `y` in place when its
+array is not shared, and leaves the elements of the array outside `y` unchanged.
 -/
-@[expose] public def axpy (α : Float32) (x y : Vec n) : Vec n where
-  data := axpyData α x y
-  off := y.off
-  inc := y.inc
-  inc_pos := y.inc_pos
-  bound := by rw [axpyData_eq, size_modifyAt]; exact y.bound
+@[expose] public def axpy (α : Float32) (x y : Vec n) : Vec n :=
+  if α == 0 then y
+  else
+    { data := axpyData α x y
+      off := y.off
+      inc := y.inc
+      inc_pos := y.inc_pos
+      bound := by rw [axpyData_eq, size_modifyAt]; exact y.bound }
 
 /-- The array of `axpy α x y` is the array of `y` with its elements updated. -/
 public theorem data_axpy (α : Float32) (x y : Vec n) :
     (axpy α x y).data = y.data.modifyAt y.stride.idx 0 n
-      fun i v => α * x.data[x.off + x.inc * i]! + v :=
-  axpyData_eq α x y
+      fun i v => if α == 0 then v else α * x.data[x.off + x.inc * i]! + v := by
+  unfold axpy
+  cases h : α == 0 <;> simp [axpyData_eq, modifyAt_id]
 
-@[simp] public theorem off_axpy (α : Float32) (x y : Vec n) : (axpy α x y).off = y.off := rfl
+@[simp] public theorem off_axpy (α : Float32) (x y : Vec n) : (axpy α x y).off = y.off := by
+  unfold axpy; split <;> rfl
 
-@[simp] public theorem inc_axpy (α : Float32) (x y : Vec n) : (axpy α x y).inc = y.inc := rfl
+@[simp] public theorem inc_axpy (α : Float32) (x y : Vec n) : (axpy α x y).inc = y.inc := by
+  unfold axpy; split <;> rfl
 
 @[simp] public theorem getElem_axpy (α : Float32) (x y : Vec n) (i : Nat) (h : i < n) :
-    (axpy α x y)[i] = α * x[i] + y[i] := by
-  rw [getElem_of_data_eq_modifyAt _ (data_axpy α x y) rfl rfl i h,
+    (axpy α x y)[i] = if α == 0 then y[i] else α * x[i] + y[i] := by
+  rw [getElem_of_data_eq_modifyAt _ (data_axpy α x y) (off_axpy α x y) (inc_axpy α x y) i h,
     getElem!_pos x.data (x.off + x.inc * i) (x.index_lt h)]
   rfl
 
@@ -174,6 +180,35 @@ public theorem data_scal (α : Float32) (x : Vec n) :
 @[simp] public theorem getElem_scal (α : Float32) (x : Vec n) (i : Nat) (h : i < n) :
     (scal α x)[i] = α * x[i] :=
   getElem_of_data_eq_modifyAt _ (data_scal α x) rfl rfl i h
+
+/--
+The array of `x` scaled by `betaMul β`, as the reference BLAS scales `y` in `gemv`: by `β`, or set
+to `0` without reading it when `β = 0`.
+-/
+public def scalBetaData (β : Float32) (x : Vec n) : Float32Array :=
+  if hs : x.data.size < USize.size then
+    let nu := n.toUSize
+    have hnu : nu.toNat = n := x.toNat_toUSize hs
+    let a := x.data
+    let o := x.off.toUSize
+    let c := x.inc.toUSize
+    (inplace a do
+      for k in 0...nu do
+        have hk : (o + c * k).toNat < a.size := x.toNat_index_lt hs (by lia)
+        a[o + c * k] := betaMul β a[o + c * k]).2
+  else x.data.modifyAt x.stride.idx 0 n fun _ v => betaMul β v
+
+public theorem scalBetaData_eq (β : Float32) (x : Vec n) :
+    scalBetaData β x = x.data.modifyAt x.stride.idx 0 n fun _ v => betaMul β v := by
+  unfold scalBetaData
+  split
+  · rename_i hs
+    have he := x.loop_idx hs
+    simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
+    rw [Tail.run_forInFrom_modify (G := fun _ v => betaMul β v) (he := he)]
+    · simp only [Tail.run_done, x.toNat_toUSize hs, USize.toNat_zero]
+    · intro _ _ _ _; rfl
+  · rfl
 
 /--
 The array of `copy`: a single `memmove` for contiguous vectors, and a loop over the strides
@@ -293,41 +328,180 @@ public theorem asum_eq (x : Vec n) :
   · exact foldUpTo_eq _ _ _ (by simp) _
   · rfl
 
+/-! ## `nrm2` -/
+
+/-!
+`nrm2` computes the Euclidean norm by Blue's algorithm, as in the reference BLAS (`snrm2.f90`,
+since LAPACK 3.10): it sums the squares in three accumulators, of the small elements scaled up, of
+the mid-range elements, and of the big elements scaled down, so that no sum overflows or underflows
+unless the norm itself does. The thresholds and scaling factors are powers of `2`, so that scaling
+is exact.
+-/
+
+end Vec
+
+namespace Blue
+
+/-- The threshold for small elements, `2 ^ (-63)`: their squares may underflow. -/
+@[expose] public def tsml : Float32 := Float32.ofBits 0x20000000
+
+/-- The threshold for big elements, `2 ^ 52`: their squares may overflow when summed. -/
+@[expose] public def tbig : Float32 := Float32.ofBits 0x59800000
+
+/-- The factor that scales up the small elements, `2 ^ 75`. -/
+@[expose] public def ssml : Float32 := Float32.ofBits 0x65000000
+
+/-- The factor that scales down the big elements, `2 ^ (-76)`. -/
+@[expose] public def sbig : Float32 := Float32.ofBits 0x19800000
+
+/-- The largest finite `Float32`. -/
+@[expose] public def maxN : Float32 := Float32.ofBits 0x7F7FFFFF
+
+end Blue
+
+namespace Vec
+
 /--
-The Euclidean norm `√(x[0] * x[0] + … + x[n - 1] * x[n - 1])`, summed from the left. Unlike the
-reference BLAS, it doesn't scale the elements, so the sum may overflow or underflow.
+One step of `nrm2`: it adds the square of `|x[i]|`, scaled, to the accumulator of its range, in
+the sums `(asml, amed, abig)` of the small, mid-range and big elements.
+
+The reference BLAS stops adding to `asml` after the first big element. That is only a shortcut:
+`asml` is ignored once `abig > 0`, which holds from the first big element on, so the result is the
+same.
+-/
+@[inline, expose] public def nrm2Step (x : Vec n) (i : Nat) (h : i < n) (s : Float32 × Float32 × Float32) :
+    Float32 × Float32 × Float32 :=
+  let ax := x[i].abs
+  if ax > Blue.tbig then (s.1, s.2.1, s.2.2 + ax * Blue.sbig * (ax * Blue.sbig))
+  else if ax < Blue.tsml then (s.1 + ax * Blue.ssml * (ax * Blue.ssml), s.2.1, s.2.2)
+  else (s.1, s.2.1 + ax * ax, s.2.2)
+
+/--
+The last step of `nrm2`, from the sums `(asml, amed, abig)` of the squares of the small,
+mid-range and big elements, scaled: it combines the two sums that matter, as the reference BLAS
+does, and takes the square root.
+-/
+@[expose] public def nrm2Finish (s : Float32 × Float32 × Float32) : Float32 :=
+  let (asml, amed, abig) := s
+  if abig > 0 then
+    let abig := if amed > 0 ∨ amed > Blue.maxN ∨ amed.isNaN then abig + amed * Blue.sbig * Blue.sbig
+      else abig
+    1 / Blue.sbig * abig.sqrt
+  else if asml > 0 then
+    if amed > 0 ∨ amed > Blue.maxN ∨ amed.isNaN then
+      let amed := amed.sqrt
+      let asml := asml.sqrt / Blue.ssml
+      let ymin := if asml > amed then amed else asml
+      let ymax := if asml > amed then asml else amed
+      1 * (ymax * ymax * (1 + ymin / ymax * (ymin / ymax))).sqrt
+    else 1 / Blue.ssml * asml.sqrt
+  else 1 * amed.sqrt
+
+/--
+The loop of `nrm2` from the index `i`, up to the bound `m`, which is `n`, with the sums `asml`,
+`amed` and `abig`. It keeps them in three loop variables rather than a tuple, which would be
+allocated at every step.
+-/
+public def nrm2Loop (x : Vec n) (o c : USize) (ho : x.off.toUSize = o) (hc : x.inc.toUSize = c)
+    (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n) (i : USize)
+    (asml amed abig : Float32) : Float32 × Float32 × Float32 :=
+  if hi : i < m then
+    let ax := (x.uget o c ho hc hs i (hm ▸ hi)).abs
+    if ax > Blue.tbig then
+      let t := ax * Blue.sbig
+      nrm2Loop x o c ho hc hs m hm (i + 1) asml amed (abig + t * t)
+    else if ax < Blue.tsml then
+      let t := ax * Blue.ssml
+      nrm2Loop x o c ho hc hs m hm (i + 1) (asml + t * t) amed abig
+    else nrm2Loop x o c ho hc hs m hm (i + 1) asml (amed + ax * ax) abig
+  else (asml, amed, abig)
+termination_by m.toNat - i.toNat
+decreasing_by
+  all_goals
+    grind
+
+private theorem nrm2Loop_eq (x : Vec n) (o c : USize) (ho : x.off.toUSize = o)
+    (hc : x.inc.toUSize = c) (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n)
+    (i : USize) (asml amed abig : Float32) (j : Nat) (hj : i.toNat = j) (hjn : j ≤ n)
+    (hacc : Nat.fold j (fun l hl => nrm2Step x l (by lia)) (0, 0, 0) = (asml, amed, abig)) :
+    nrm2Loop x o c ho hc hs m hm i asml amed abig = Nat.fold n (nrm2Step x) (0, 0, 0) := by
+  obtain ⟨d, hd⟩ : ∃ d, n - j = d := ⟨_, rfl⟩
+  induction d generalizing i asml amed abig j with
+  | zero =>
+    rw [nrm2Loop, dite_eq_right_of_eq_false (eq_false (by grind))]
+    obtain rfl : j = n := by lia
+    rw [hacc]
+  | succ d ih =>
+    have hi : i < m := by grind
+    have hsucc : (i + 1).toNat = j + 1 := by grind
+    have hstep : Nat.fold (j + 1) (fun l hl => nrm2Step x l (by lia)) (0, 0, 0) =
+        nrm2Step x j (by lia) (asml, amed, abig) := by
+      rw [Nat.fold_succ, hacc]
+    rw [nrm2Loop, dite_eq_left_of_eq_true (eq_true hi)]
+    simp only [uget_eq_getElem]
+    subst hj
+    split
+    next hb =>
+      refine ih (i + 1) _ _ _ (i.toNat + 1) hsucc (by lia) ?_ (by lia)
+      rw [hstep]
+      simp only [nrm2Step, hb, ite_true]
+    next hb =>
+      split
+      next hs' =>
+        refine ih (i + 1) _ _ _ (i.toNat + 1) hsucc (by lia) ?_ (by lia)
+        rw [hstep]
+        simp only [nrm2Step, hb, hs', ite_true, ite_false]
+      next hs' =>
+        refine ih (i + 1) _ _ _ (i.toNat + 1) hsucc (by lia) ?_ (by lia)
+        rw [hstep]
+        simp only [nrm2Step, hb, hs', ite_false]
+
+/--
+The Euclidean norm `√(x[0] * x[0] + … + x[n - 1] * x[n - 1])`, by Blue's algorithm, as in the
+reference BLAS: it overflows or underflows only when the norm does. It is `0` for the empty vector,
+a `NaN` if an element is a `NaN`, and otherwise `∞` if an element is infinite.
 -/
 public def nrm2 (x : Vec n) : Float32 :=
-  if hs : x.data.size < USize.size then
-    let xo := x.off.toUSize
-    let xc := x.inc.toUSize
-    (foldUpTo n (fun i h s => s + x[i] * x[i])
-      (fun i h s => s + x.uget xo xc rfl rfl hs i h * x.uget xo xc rfl rfl hs i h) 0).sqrt
-  else (Nat.fold n (fun i h s => s + x[i] * x[i]) 0).sqrt
+  nrm2Finish <|
+    if hs : x.data.size < USize.size then
+      nrm2Loop x _ _ rfl rfl hs n.toUSize (x.toNat_toUSize hs) 0 0 0 0
+    else Nat.fold n (nrm2Step x) (0, 0, 0)
 
-public theorem nrm2_eq (x : Vec n) :
-    nrm2 x = (Nat.fold n (fun i h s => s + x[i] * x[i]) 0).sqrt := by
-  unfold nrm2; split
-  · simp only []
-    rw [foldUpTo_eq _ _ _ (by simp)]
+/--
+`nrm2 x` is `nrm2Finish` of the sums of the scaled squares, accumulated from the left by
+`nrm2Step`.
+-/
+public theorem nrm2_eq (x : Vec n) : nrm2 x = nrm2Finish (Nat.fold n (nrm2Step x) (0, 0, 0)) := by
+  unfold nrm2
+  split
+  · rw [nrm2Loop_eq x _ _ rfl rfl _ _ _ 0 0 0 0 0 (by simp) (by lia) (by simp)]
   · rfl
 
-/-- One step of `iamax`: the index and absolute value of the first largest element so far. -/
+/-! ## `iamax` -/
+
+/--
+One step of `iamax`: the index and absolute value of the first largest element so far, or of the
+first `NaN`. An element replaces the largest so far unless it is `≤` it, so a `NaN` replaces it,
+and nothing replaces a `NaN`.
+-/
 @[inline, expose] public def iamaxStep (x : Vec n) (i : Nat) (h : i < n) (b : Nat × Float32) :
     Nat × Float32 :=
   let a := x[i].abs
-  if i = 0 ∨ a > b.2 then (i, a) else b
+  if i = 0 ∨ ¬b.2.isNaN ∧ ¬a ≤ b.2 then (i, a) else b
 
 /--
 The loop of `iamax` from the index `i`, up to the bound `m`, which is `n`, with the index `k` and
 absolute value `a` of the first largest element so far. It keeps them in two loop variables rather
-than a pair, which would be allocated at every new largest element.
+than a pair, which would be allocated at every new largest element. It returns at the first `NaN`,
+as the reference BLAS does, since nothing replaces it, so it checks for a `NaN` only at a new
+largest element.
 -/
 public def iamaxLoop (x : Vec n) (o c : USize) (ho : x.off.toUSize = o) (hc : x.inc.toUSize = c)
     (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float32) : Nat :=
   if hi : i < m then
     let b := (x.uget o c ho hc hs i (hm ▸ hi)).abs
-    if i = 0 ∨ b > a then iamaxLoop x o c ho hc hs m hm (i + 1) i b
+    if i = 0 ∨ ¬b ≤ a then
+      if b.isNaN then i.toNat else iamaxLoop x o c ho hc hs m hm (i + 1) i b
     else iamaxLoop x o c ho hc hs m hm (i + 1) k a
   else k.toNat
 termination_by m.toNat - i.toNat
@@ -335,9 +509,23 @@ decreasing_by
   all_goals
     grind
 
+/-- Once the largest element so far is a `NaN`, the steps of `iamax` keep it. -/
+private theorem fold_iamaxStep_of_isNaN (x : Vec n) {j : Nat} (hj : 0 < j) {k : Nat} {a : Float32}
+    (ha : a.isNaN = true) (hjn : j ≤ n)
+    (hacc : Nat.fold j (fun l hl => iamaxStep x l (by lia)) (0, 0) = (k, a)) :
+    ∀ N (_ : j ≤ N) (hN : N ≤ n),
+      Nat.fold N (fun l hl => iamaxStep x l (by lia)) (0, 0) = (k, a)
+  | 0, _, _ => by lia
+  | N + 1, hjN, hN => by
+    by_cases e : j = N + 1
+    · subst e; exact hacc
+    · rw [Nat.fold_succ, fold_iamaxStep_of_isNaN x hj ha hjn hacc N (by lia) (by lia)]
+      simp [iamaxStep, ha, show N ≠ 0 by lia]
+
 private theorem iamaxLoop_eq (x : Vec n) (o c : USize) (ho : x.off.toUSize = o)
-    (hc : x.inc.toUSize = c) (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float32)
-    (j : Nat) (hj : i.toNat = j) (hjn : j ≤ n)
+    (hc : x.inc.toUSize = c) (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n)
+    (i k : USize) (a : Float32) (j : Nat) (hj : i.toNat = j) (hjn : j ≤ n)
+    (hnan : j = 0 ∨ a.isNaN = false)
     (hacc : Nat.fold j (fun l hl => iamaxStep x l (by lia)) (0, 0) = (k.toNat, a)) :
     iamaxLoop x o c ho hc hs m hm i k a = (Nat.fold n (iamaxStep x) (0, 0)).1 := by
   obtain ⟨d, hd⟩ : ∃ d, n - j = d := ⟨_, rfl⟩
@@ -355,21 +543,42 @@ private theorem iamaxLoop_eq (x : Vec n) (o c : USize) (ho : x.off.toUSize = o)
     rw [iamaxLoop, dite_eq_left_of_eq_true (eq_true hi)]
     simp only [uget_eq_getElem]
     subst hj
+    have hi0 : i = 0 ↔ i.toNat = 0 := by simp [← USize.toNat_inj]
     split
     next hc =>
-      refine ih (i + 1) i _ (i.toNat + 1) hsucc (by lia) ?_ (by lia)
-      have hc' : i.toNat = 0 ∨ x[i.toNat].abs > a := by simpa [← USize.toNat_inj] using hc
-      rw [hstep]
-      simp only [iamaxStep, hc', ite_true]
+      have hc' : i.toNat = 0 ∨ ¬a.isNaN ∧ ¬x[i.toNat].abs ≤ a := by
+        rcases hc with hc | hc
+        · exact Or.inl (hi0.1 hc)
+        · rcases hnan with hn | hn
+          · exact Or.inl hn
+          · exact Or.inr ⟨by simp [hn], hc⟩
+      have hnext : Nat.fold (i.toNat + 1) (fun l hl => iamaxStep x l (by lia)) (0, 0) =
+          (i.toNat, x[i.toNat].abs) := by
+        rw [hstep]
+        simp only [iamaxStep, hc', ite_true]
+      split
+      next hb =>
+        rw [fold_iamaxStep_of_isNaN x (Nat.succ_pos _) hb (by lia) hnext n (by lia) (Nat.le_refl _)]
+      next hb =>
+        exact ih (i + 1) i _ (i.toNat + 1) hsucc (by lia) (Or.inr (by simpa using hb)) hnext
+          (by lia)
     next hc =>
-      refine ih (i + 1) k a (i.toNat + 1) hsucc (by lia) ?_ (by lia)
-      have hc' : ¬(i.toNat = 0 ∨ x[i.toNat].abs > a) := by simpa [← USize.toNat_inj] using hc
-      rw [hstep]
-      simp only [iamaxStep, hc', ite_false]
+      have hc' : ¬(i.toNat = 0 ∨ ¬a.isNaN ∧ ¬x[i.toNat].abs ≤ a) := by
+        simp only [not_or, Decidable.not_not] at hc
+        rw [hi0] at hc
+        grind
+      refine ih (i + 1) k a (i.toNat + 1) hsucc (by lia) (Or.inr ?_) ?_ (by lia)
+      · rcases hnan with hn | hn
+        · simp only [not_or] at hc
+          exact absurd (hi0.2 hn) hc.1
+        · exact hn
+      · rw [hstep]
+        simp only [iamaxStep, hc', ite_false]
 
 /--
-The index of the first element of largest absolute value, or `0` for the empty vector. As in the
-reference BLAS, a `NaN` is never larger, unless it is the first element.
+The index of the first element of largest absolute value, or of the first `NaN`, as in the
+reference BLAS (after LAPACK 3.12.1, which skips a `NaN` unless it is the first element). Unlike
+the reference BLAS, the index starts at `0`, and it is `0` for the empty vector.
 -/
 public def iamax (x : Vec n) : Nat :=
   if hs : x.data.size < USize.size then iamaxLoop x _ _ rfl rfl hs n.toUSize (x.toNat_toUSize hs) 0 0 0
@@ -378,7 +587,7 @@ public def iamax (x : Vec n) : Nat :=
 public theorem iamax_eq (x : Vec n) : iamax x = (Nat.fold n (iamaxStep x) (0, 0)).1 := by
   unfold iamax
   split
-  · exact iamaxLoop_eq x _ _ rfl rfl _ _ _ 0 0 0 0 (by simp) (by lia) (by simp)
+  · exact iamaxLoop_eq x _ _ rfl rfl _ _ _ 0 0 0 0 (by simp) (by lia) (.inl rfl) (by simp)
   · rfl
 
 end Vec
