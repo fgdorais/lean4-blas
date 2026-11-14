@@ -149,19 +149,22 @@ differs from the reference BLAS, such as `iamax` counting from `0`, its document
 ## Performance
 
 Speed comes second to proofs, and it is measured rather than promised. On the machines measured
-so far, the routines match the reference BLAS on Level 1 and surpass it on Level 2, `gemm` is
-about 4 times faster than its `dgemm`, `trsm` 2 to 3 times as fast as its `dtrsm`, and `syrk` and
-`syrkT` about twice as fast as their `dsyrk`.
+so far, the routines match the reference BLAS on Level 1 and surpass it on Level 2, by 1.1 to 2
+times. `gemm` is about 4 times faster than its `dgemm`, `trsm` 2 to 3 times as fast as its `dtrsm`,
+`syrk` and `syrkT` 1.2 to 1.9 times as fast as their `dsyrk`, and `trsmRight` 1.2 to 1.5 times as
+fast.
 
-Against OpenBLAS on one thread, the Level 1 updates and the Level 2 routines run at about its speed,
-the reductions such as `dot` and `iamax` at about half its speed, since their specifications fix
-the order of their operations, `gemm` about 4 times slower, and `trsm` 2 to 5 times slower. `syrk`
-and `syrkT` are the furthest behind, 5 to 11 times slower on matrices of 256 to 1024 rows, since
-they don't have a blocked kernel like `gemm`'s yet. OpenBLAS runs on several threads by default, and this
-library runs on one, so on a multi-core machine the gap is larger. These figures are for `Float64`.
-On `Float32`, whose vectors hold twice as many elements, the reductions and `gemm` fall further
-behind OpenBLAS, to about 4 to 5 times slower. `scripts/blas_compare.py`, below, measures both
-comparisons. [TODO.md](TODO.md) lists possible improvements.
+Against OpenBLAS on one thread, the Level 1 updates run at about its speed, and the Level 2
+routines at 1 to 1.4 times slower on matrices of 1024 rows or more. The reductions such as `dot`
+and `iamax` run at about half its speed, since their specifications fix the order of their
+operations. `gemm` is about 4 times slower, `trsm` 2 to 4.5 times and `trsmRight` 3 to 8 times.
+`syrk` and `syrkT` are the furthest behind, 7 to 11 times slower on matrices of 256 to 1024 rows,
+since they don't have a blocked kernel like `gemm`'s yet. OpenBLAS runs on several threads by
+default, and this library runs on one, so on a multi-core machine the gap is larger. These figures
+are for `Float64`. On `Float32`, whose vectors hold twice as many elements, the reductions fall
+further behind OpenBLAS, to about 2.5 to 3.5 times slower, and `gemm` to about 4.5 to 6 times
+slower. `scripts/blas_compare.py`, below, measures both comparisons. [TODO.md](TODO.md) lists
+possible improvements.
 
 ### Compiler options
 

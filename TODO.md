@@ -8,7 +8,7 @@ compiled like our kernels (`-O3 -ffp-contract=off`, baseline x86-64), and are no
 Every item keeps the specifications exact, in the order of operations of the reference BLAS.
 Changes that would reorder them, such as partial sums in `dot`, `asum` and `nrm2`, are left out.
 
-## `gemm` (4–5× behind)
+## `gemm` (3.4–4.4× behind, 4.4–6× in `Float32`)
 
 - Measured, not worth it: wider kernels. In C prototypes in the exact order, a sweep of four
   columns and four terms runs at the speed of the current two columns and four terms (about 20
@@ -20,7 +20,7 @@ Changes that would reorder them, such as partial sums in `dot`, `asum` and `nrm2
 - [ ] Parallel `gemm` over blocks of columns of `C`, with `Task`. Each column is independent, so
   the result stays the same to the bit. OpenBLAS on 4 threads is 10–18× ahead.
 
-## `syrk`, `syrkT` and `trsm` (5–10×, 7–11× and 2–5× behind at 256–1024)
+## `syrk`, `syrkT`, `trsm` and `trsmRight` (6.6–9.3×, 8–11×, 2.2–4.5× and 3–8× behind at 256–1024)
 
 - [x] `syrkT`: compute four elements of a column at a time, with the sums of `gemvT`. About 2×.
 - [ ] `syrk`: sweep the rows of a block for several terms at a time, as `gemm` does. Each element
@@ -30,11 +30,14 @@ Changes that would reorder them, such as partial sums in `dot`, `asum` and `nrm2
 - [x] `trsm`: solve four columns of `B` at a time, which share the reads of `A`. The columns are
   independent, so each keeps its order of operations. About 2× at 1024, where a column at a time
   read all of `A` from memory for each column, and 1–1.2× at 256.
+- [ ] `trsmRight`: subtract four solved columns per pass over the rows of column `j`, as `gemv` adds
+  four columns, so that each element keeps its order of operations. It is 3× behind at 256 and 8×
+  at 1024, where `trsm` is 2.2× and 4.5×. Not measured yet.
 - [ ] `trsm`, `trsmRight`: update the rest of `B` by the `gemm` kernel after each block of solved
   rows or columns. This changes the order of the updates of an element only if the blocks reorder
   its terms, so it needs care to stay exact.
 
-## `iamax` (about 2× behind)
+## `iamax` (1.6–1.9× behind, 2.4× in `Float32`)
 
 - [ ] Find the largest `|x[i]|` with several independent running maxima, then the first index that
   holds it: 4× faster on typical data, 1.6× in the worst case, with the same result. Proving it
@@ -42,12 +45,14 @@ Changes that would reorder them, such as partial sums in `dot`, `asum` and `nrm2
   non-`NaN` floats, no comparison with `NaN` is true, and `|x|` is `NaN` only when `x` is. Propose
   them to core, for `Float` and `Float32`.
 
-## Level 2 (0.8–1.2× at 1024 and 2048)
+## Level 2 (0.9–1.3× at 1024 and 2048, 1.2–1.8× at 256)
 
 - [ ] `trsv`: update the rest of `x` four columns at a time after each block of four solved
   elements, as `gemv` does. Each element keeps its order of operations. Not measured yet.
-- [ ] `gemv` with strided `x` and `y` is 1.3–1.5× behind, and 3.4–6.6× behind in `Float32`, where
-  Netlib is also 7–12% faster. Not investigated yet.
+- [ ] `gemv` with strided `x` and `y` is 1.05–3× behind, and 2.4–7.4× behind in `Float32`, where
+  Netlib is also up to 6% faster at 256 and 1024. Not investigated yet.
+- [ ] `gemvT` at 256 is 1.8× behind, and 4.5× in `Float32`, against 1.0–1.1× (1.6–1.7× in
+  `Float32`) at 1024 and 2048. Not investigated yet.
 
 ## Build
 
