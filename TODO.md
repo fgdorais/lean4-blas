@@ -5,7 +5,8 @@ BLAS through `scripts/blas_compare.py` (see the README). The ratios are OpenBLAS
 thread over ours, measured on a 4-core Xeon with AVX-512. The estimates come from C prototypes
 compiled like our kernels (`-O3 -ffp-contract=off`, baseline x86-64), and are not promises.
 
-Every item keeps the specifications exact, unless it says otherwise.
+Every item keeps the specifications exact, in the order of operations of the reference BLAS.
+Changes that would reorder them, such as partial sums in `dot`, `asum` and `nrm2`, are left out.
 
 ## `gemm` (4–5× behind)
 
@@ -16,13 +17,6 @@ Every item keeps the specifications exact, unless it says otherwise.
   within noise with the current kernel.
 - [ ] Parallel `gemm` over blocks of columns of `C`, with `Task`. Each column is independent, so
   the result stays the same to the bit. OpenBLAS on 4 threads is 10–18× ahead.
-
-## Reductions: `dot`, `asum`, `nrm2` (about 2× behind)
-
-- [ ] Their speed is bound by the latency of one chain of additions, since the specifications fix
-  a sum from the left. Four to eight partial sums are 1.6–1.8× faster, but change the order of the
-  sum. This needs separate routines with their own specifications, or a decision to relax the
-  current ones.
 
 ## `iamax` (about 2× behind)
 
