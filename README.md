@@ -138,7 +138,7 @@ The Level 1 updates and the Level 2 routines run at about its speed, the reducti
 and `iamax` at about half its speed, since their specifications fix the order of their operations,
 and `gemm` is the furthest behind. OpenBLAS runs on several threads by default, and this
 library runs on one, so on a multi-core machine the gap is larger. `scripts/blas_compare.py`,
-below, measures both comparisons.
+below, measures both comparisons. [TODO.md](TODO.md) lists possible improvements.
 
 ### Compiler options
 
