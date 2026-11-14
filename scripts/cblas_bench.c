@@ -11,6 +11,9 @@
  *   cc -O2 -o cblas_bench scripts/cblas_bench.c -ldl
  *   ./cblas_bench /usr/lib/x86_64-linux-gnu/blas/libblas.so.3 [size] [rounds]
  *
+ * It times the double-precision routines, `ddot` and so on, or the single-precision ones, `sdot`
+ * and so on, when compiled with `-DSINGLE`, to compare with `lake exe bench --float32`.
+ *
  * It prints `name<TAB>milliseconds` lines, with the names, inputs, repetitions and sizes of
  * `lake exe bench --tsv`, and each time is the fastest of `rounds` runs. `scripts/blas_compare.py`
  * puts the two side by side.
@@ -28,21 +31,33 @@ enum { NoTrans = 111, Trans = 112 };
 enum { Upper = 121, Lower = 122 };
 enum { NonUnit = 131 };
 
-static double (*ddot)(int, const double *, int, const double *, int);
-static void (*daxpy)(int, double, const double *, int, double *, int);
-static void (*dscal)(int, double, double *, int);
-static void (*dcopy)(int, const double *, int, double *, int);
-static double (*dasum)(int, const double *, int);
-static double (*dnrm2)(int, const double *, int);
-static size_t (*idamax)(int, const double *, int);
-static void (*drot)(int, double *, int, double *, int, double, double);
-static void (*dgemv)(int, int, int, int, double, const double *, int, const double *, int,
-                     double, double *, int);
-static void (*dger)(int, int, int, double, const double *, int, const double *, int, double *,
+/* The precision: `double` by default, `float` with `-DSINGLE`. */
+#ifdef SINGLE
+typedef float real;
+#define CBLAS(name) "cblas_s" name
+#define CBLAS_I(name) "cblas_is" name
+#else
+typedef double real;
+#define CBLAS(name) "cblas_d" name
+#define CBLAS_I(name) "cblas_id" name
+#endif
+
+/* The routines, named after their double-precision versions. */
+static real (*ddot)(int, const real *, int, const real *, int);
+static void (*daxpy)(int, real, const real *, int, real *, int);
+static void (*dscal)(int, real, real *, int);
+static void (*dcopy)(int, const real *, int, real *, int);
+static real (*dasum)(int, const real *, int);
+static real (*dnrm2)(int, const real *, int);
+static size_t (*idamax)(int, const real *, int);
+static void (*drot)(int, real *, int, real *, int, real, real);
+static void (*dgemv)(int, int, int, int, real, const real *, int, const real *, int,
+                     real, real *, int);
+static void (*dger)(int, int, int, real, const real *, int, const real *, int, real *,
                     int);
-static void (*dtrsv)(int, int, int, int, int, const double *, int, double *, int);
-static void (*dgemm)(int, int, int, int, int, int, double, const double *, int, const double *,
-                     int, double, double *, int);
+static void (*dtrsv)(int, int, int, int, int, const real *, int, real *, int);
+static void (*dgemm)(int, int, int, int, int, int, real, const real *, int, const real *,
+                     int, real, real *, int);
 
 static void *sym(void *lib, const char *name) {
   void *p = dlsym(lib, name);
@@ -77,23 +92,23 @@ static void time_it(const char *name, double (*f)(void *), void *env) {
 }
 
 /* The inputs of `lake exe bench`. */
-static double *vec(size_t n) {
-  double *x = malloc(n * sizeof(double));
-  for (size_t i = 0; i < n; i++) x[i] = (double)(i % 7) - 3;
+static real *vec(size_t n) {
+  real *x = malloc(n * sizeof(real));
+  for (size_t i = 0; i < n; i++) x[i] = (real)(i % 7) - 3;
   return x;
 }
 
-static double *mat(int m, int s) {
-  double *a = malloc((size_t)m * m * sizeof(double));
+static real *mat(int m, int s) {
+  real *a = malloc((size_t)m * m * sizeof(real));
   for (int j = 0; j < m; j++)
-    for (int i = 0; i < m; i++) a[i + (size_t)m * j] = (double)((i * 7 + j * 13 + s) % 11) - 5;
+    for (int i = 0; i < m; i++) a[i + (size_t)m * j] = (real)((i * 7 + j * 13 + s) % 11) - 5;
   return a;
 }
 
 /* What a benchmark works on: `x` is read, `z` and `w` are scratch copies, `inc` is the stride. */
 typedef struct {
   int n, inc;
-  double *x, *z, *w;
+  real *x, *z, *w;
 } L1;
 
 /* The updates copy their input first, as the first update of `lake exe bench` does. */
@@ -141,7 +156,7 @@ static double b_iamax(void *e) {
 
 typedef struct {
   int m, inc;
-  double *a, *x, *y, *b;
+  real *a, *x, *y, *b;
 } L2;
 
 static double b_gemv(void *e) {
@@ -163,7 +178,7 @@ static double b_gemvT(void *e) {
 static double b_ger(void *e) {
   L2 *v = e;
   int m = v->m;
-  memcpy(v->b, v->a, (size_t)m * m * sizeof(double));
+  memcpy(v->b, v->a, (size_t)m * m * sizeof(real));
   for (int k = 0; k < reps; k++) dger(ColMajor, m, m, 1.5, v->x, 1, v->x, 1, v->b, m);
   return v->b[0];
 }
@@ -178,14 +193,14 @@ static double b_trsvU(void *e) { return trsv(e, Upper); }
 
 typedef struct {
   int m;
-  double *a, *b, *c, *z;
+  real *a, *b, *c, *z;
 } L3;
 
 /* `gemm` of `lake exe bench` returns a new matrix, so this one writes into a copy of `C`. */
 static double b_gemm(void *e) {
   L3 *v = e;
   int m = v->m;
-  memcpy(v->z, v->c, (size_t)m * m * sizeof(double));
+  memcpy(v->z, v->c, (size_t)m * m * sizeof(real));
   dgemm(ColMajor, NoTrans, NoTrans, m, m, m, 1.5, v->a, m, v->b, m, 0.5, v->z, m);
   return v->z[0];
 }
@@ -202,18 +217,18 @@ int main(int argc, char **argv) {
   }
   int n = argc > 2 ? atoi(argv[2]) : 1000000;
   if (argc > 3) rounds = atoi(argv[3]);
-  ddot = sym(lib, "cblas_ddot");
-  daxpy = sym(lib, "cblas_daxpy");
-  dscal = sym(lib, "cblas_dscal");
-  dcopy = sym(lib, "cblas_dcopy");
-  dasum = sym(lib, "cblas_dasum");
-  dnrm2 = sym(lib, "cblas_dnrm2");
-  idamax = sym(lib, "cblas_idamax");
-  drot = sym(lib, "cblas_drot");
-  dgemv = sym(lib, "cblas_dgemv");
-  dger = sym(lib, "cblas_dger");
-  dtrsv = sym(lib, "cblas_dtrsv");
-  dgemm = sym(lib, "cblas_dgemm");
+  ddot = sym(lib, CBLAS("dot"));
+  daxpy = sym(lib, CBLAS("axpy"));
+  dscal = sym(lib, CBLAS("scal"));
+  dcopy = sym(lib, CBLAS("copy"));
+  dasum = sym(lib, CBLAS("asum"));
+  dnrm2 = sym(lib, CBLAS("nrm2"));
+  idamax = sym(lib, CBLAS_I("amax"));
+  drot = sym(lib, CBLAS("rot"));
+  dgemv = sym(lib, CBLAS("gemv"));
+  dger = sym(lib, CBLAS("ger"));
+  dtrsv = sym(lib, CBLAS("trsv"));
+  dgemm = sym(lib, CBLAS("gemm"));
 
   char name[64];
   L1 v = {n, 1, vec(n), vec(n), vec(n)};
@@ -229,7 +244,7 @@ int main(int argc, char **argv) {
   time_it("asum", b_asum, &v);
   time_it("nrm2", b_nrm2, &v);
   time_it("iamax", b_iamax, &v);
-  L1 up = {n, 1, malloc(n * sizeof(double)), v.z, v.w};
+  L1 up = {n, 1, malloc(n * sizeof(real)), v.z, v.w};
   for (int i = 0; i < n; i++) up.x[i] = i;
   time_it("iamax (increasing)", b_iamax, &up);
   L1 v2 = {n, 2, vec(2 * (size_t)n), vec(2 * (size_t)n), NULL};
@@ -254,7 +269,7 @@ int main(int argc, char **argv) {
     time_it(name, b_gemv, &w2);
     for (int j = 0; j < m; j++)
       for (int i = 0; i < m; i++)
-        w.b[i + (size_t)m * j] = i == j ? m + 4 + i : (double)((i * 7 + j * 13) % 11) - 5;
+        w.b[i + (size_t)m * j] = i == j ? m + 4 + i : (real)((i * 7 + j * 13) % 11) - 5;
     snprintf(name, sizeof name, "trsv lower %d ×%d", m, reps);
     time_it(name, b_trsvL, &w);
     snprintf(name, sizeof name, "trsv upper %d ×%d", m, reps);

@@ -4,3 +4,5 @@ BLAS/Float32.lean linguist-generated
 BLAS/Float32/** linguist-generated
 BLASTest/Float32.lean linguist-generated
 BLASTest/Float32/** linguist-generated
+BLASBench/Float32.lean linguist-generated
+BLASBench/Float32/** linguist-generated

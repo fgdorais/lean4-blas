@@ -23,6 +23,12 @@ moreLeancArgs = ["-falign-loops=64"]
 name = "BLASTest"
 precompileModules = true
 
+# The modules of the `bench` exe, other than its root.
+[[lean_lib]]
+name = "BLASBenchLib"
+globs = ["BLASBench.+"]
+moreLeancArgs = ["-falign-loops=64"]
+
 [[lean_exe]]
 name = "bench"
 root = "BLASBench"
