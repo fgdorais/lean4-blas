@@ -54,7 +54,7 @@ public def gemmModel (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32)
 `gemm α A B β C` is `α * A * B + β * C`, by the naive loops of the reference BLAS: for each column
 `j`, it scales the column of `C` by `β`, or sets it to `0` without reading it when `β = 0`, then
 adds `α * B[l, j]` times column `l` of `A`, for `l = 0, …, k - 1`. It updates `C` in place when
-`C` is not shared. `Mat.gemm` handles the case `α = 0`, which doesn't run this kernel.
+`C` is not shared. `Mat.gemmNaive` handles the case `α = 0`, which doesn't run this kernel.
 -/
 public def gemm (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32) (C : PMat m n) : PMat m n :=
   if hs : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧

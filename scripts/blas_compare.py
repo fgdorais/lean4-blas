@@ -7,7 +7,7 @@ LEAN.tsv holds the `lake exe bench --tsv` output, and each OTHER.tsv the `cblas_
 one implementation, which is labeled NAME. Each file may hold several runs, of which the fastest
 time is kept. The table shows each time in milliseconds, or GFLOP/s where the operation count is
 known, and the ratio of the implementation's speed to `BLAS`'s: 2.0 means it is twice as fast.
-`gemm` and `gemmBlocked` are both compared with the implementation's `gemm`.
+`gemm` and `gemmNaive` are both compared with the implementation's `gemm`.
 """
 
 import re
@@ -36,7 +36,7 @@ def flops(name):
     if m:
         k, n, reps = m.group(1), int(m.group(2)), int(m.group(3))
         return (1 if k.startswith("trsv") else 2) * n * n * reps
-    m = re.fullmatch(r"gemm(?:Blocked)? (\d+)", name)
+    m = re.fullmatch(r"gemm(?:Naive)? (\d+)", name)
     if m:
         n = int(m.group(1))
         return 2 * n * n * n
@@ -45,7 +45,7 @@ def flops(name):
 
 def other_name(name):
     """The name of the benchmark of a C BLAS that `name` compares with."""
-    return re.sub(r"^gemmBlocked ", "gemm ", name)
+    return re.sub(r"^gemmNaive ", "gemm ", name)
 
 
 def main():

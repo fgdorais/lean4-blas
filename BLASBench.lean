@@ -279,7 +279,7 @@ def mat (m s : Nat) : BLAS.Float64.Mat m m :=
 def gemmSizes : List Nat := [64, 256, 512, 1024]
 
 /--
-The `gemm` benchmarks for `m × m` matrices: the rows of `gemm` and `gemmBlocked`, and their
+The `gemm` benchmarks for `m × m` matrices: the rows of `gemmNaive` and `gemm`, and their
 floating-point operations. Each timed call depends on its argument, which is `m`, so that the
 compiler can't hoist it out of the timing loop.
 -/
@@ -288,9 +288,9 @@ def gemmRows (rounds m : Nat) : IO (List Row × Nat) := do
   let B := mat m 2
   let C := mat m 3
   let α (q : Nat) := 1.5 + (q - m).toFloat
-  let t ← time rounds m fun q => (BLAS.Float64.Mat.gemm (α q) A B 0.5 C).data[0]!
+  let t ← time rounds m fun q => (BLAS.Float64.Mat.gemmNaive (α q) A B 0.5 C).data[0]!
   let t' ← time rounds m fun q => (refGemm m.toUSize (α q) A.data B.data 0.5 C.data)[0]!
-  let tb ← time rounds m fun q => (BLAS.Float64.Mat.gemmBlocked (α q) A B 0.5 C).data[0]!
+  let tb ← time rounds m fun q => (BLAS.Float64.Mat.gemm (α q) A B 0.5 C).data[0]!
   -- The same matrices as blocks of larger ones, with the leading dimension `m + 8`: they are
   -- packed, and the result is copied back into `C`'s array.
   let ld (X : BLAS.Float64.Mat m m) : BLAS.Float64.Mat m m :=
@@ -298,9 +298,9 @@ def gemmRows (rounds m : Nat) : IO (List Row × Nat) := do
   let A₁ := ld A
   let B₁ := ld B
   let C₁ := ld C
-  let tl ← time rounds m fun q => (BLAS.Float64.Mat.gemmBlocked (α q) A₁ B₁ 0.5 C₁).data[0]!
-  return ([⟨s!"gemm {m}", t, some t'⟩, ⟨s!"gemmBlocked {m}", tb, some t'⟩,
-    ⟨s!"gemmBlocked {m}, ld = {m} + 8 / ld = {m}", tl, some tb⟩], 2 * m * m * m)
+  let tl ← time rounds m fun q => (BLAS.Float64.Mat.gemm (α q) A₁ B₁ 0.5 C₁).data[0]!
+  return ([⟨s!"gemmNaive {m}", t, some t'⟩, ⟨s!"gemm {m}", tb, some t'⟩,
+    ⟨s!"gemm {m}, ld = {m} + 8 / ld = {m}", tl, some tb⟩], 2 * m * m * m)
 
 /-- The sizes of the Level 2 benchmarks. -/
 def level2Sizes : List Nat := [256, 1024, 2048]
@@ -395,7 +395,7 @@ public def main (args : List String) : IO Unit := do
           s!"| {m} | {g v.time} | {g t.time} | {g r.time} | {g v2.time} | {g (2 * tl.time)} | {g (2 * tu.time)} |"
       | _ => pure ()
     IO.println "\n`gemm` of square matrices, in GFLOP/s.\n"
-    IO.println "| Size | gemm | gemmBlocked | gemmBlocked, ld = m + 8 | Reference |"
+    IO.println "| Size | gemmNaive | gemm | gemm, ld = m + 8 | Reference |"
     IO.println "|--:|--:|--:|--:|--:|"
     for (rs, flops) in gemm, m in gemmSizes do
       let g (t : Float) := fmt (flops.toFloat / (t * 1e6))

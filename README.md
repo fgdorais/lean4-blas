@@ -70,8 +70,8 @@ the reference `drotmg` loops forever, when `d1` or `d2` is or becomes infinite, 
 dimension `ld ≥ m`, as in the reference BLAS: `A[(i, j)]` is at the index `off + ld * j + i`.
 `Mat.ofFn` makes a packed matrix (`off = 0`, `ld = m`), and `Mat.ofLd? a off ld` makes a view of
 the array `a`, such as a block of a larger matrix. `A.col j` and `A.row i` are vectors over the
-same array, with no copy. `Mat.gemm α A B β C`, for `A : Mat m k`, `B : Mat k n` and `C : Mat m n`, is
-`α * A * B + β * C`, over `C`, in the order of the reference BLAS:
+same array, with no copy. `Mat.gemm α A B β C`, for `A : Mat m k`, `B : Mat k n` and
+`C : Mat m n`, is `α * A * B + β * C`, over `C`, in the order of the reference BLAS:
 
 ```lean
 (gemm α A B β C)[(i, j)] =
@@ -84,10 +84,10 @@ where `betaMul β v` is `β * v`, or `0` when `β = 0`: as in the reference BLAS
 reading `A` or `B`. `data_gemm` gives the whole array of the result, so the elements outside `C`
 are unchanged.
 
-`Mat.gemmBlocked` computes the same matrix about twice as fast. It works on blocks of 256 rows and
-128 terms, and sweeps the rows of a block for two columns of `C` and four terms at a time, which
-the C compiler vectorizes. Each element still gets its terms in the order of the specification, so
-`gemmBlocked_eq_gemm` proves that the result is the same to the bit.
+`gemm` works on blocks of 256 rows and 128 terms, and sweeps the rows of a block for two columns
+of `C` and four terms at a time, which the C compiler vectorizes. Each element still gets its terms
+in the order of the specification. `Mat.gemmNaive` runs the naive loops of the reference BLAS, about
+half as fast, and `gemm_eq_gemmNaive` proves that the results are the same to the bit.
 
 Both run their kernels on packed matrices, `PMat m n`. A packed `Mat` goes to the kernel as it is,
 and a packed `C` is updated in place. Any other matrix is packed into a copy first, one `memmove`
@@ -130,14 +130,13 @@ differs from the reference BLAS, such as `iamax` counting from `0`, its document
 ## Performance
 
 Speed comes second to proofs, and it is measured rather than promised. On the machines measured
-so far, the routines match the reference BLAS on Level 1 and surpass it on Level 2, and
-`gemmBlocked` is about 4 times faster than its `dgemm`.
+so far, the routines match the reference BLAS on Level 1 and surpass it on Level 2, and `gemm` is
+about 4 times faster than its `dgemm`.
 
 Against OpenBLAS on one thread, we don't expect any routine to be more than about 5 times slower.
 The Level 1 updates and the Level 2 routines run at about its speed, the reductions such as `dot`
 and `iamax` at about half its speed, since their specifications fix the order of their operations,
-and `gemmBlocked` is the furthest behind. The plain `gemm` is slower still: use `gemmBlocked`,
-which gives the same result to the bit. OpenBLAS runs on several threads by default, and this
+and `gemm` is the furthest behind. OpenBLAS runs on several threads by default, and this
 library runs on one, so on a multi-core machine the gap is larger. `scripts/blas_compare.py`,
 below, measures both comparisons.
 
