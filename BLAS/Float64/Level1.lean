@@ -6,7 +6,7 @@ module
 
 public import BLAS.Float64.Vec
 public import BLAS.Float64.Loop
-public import ScalarArray.InPlaceSyntax
+public import ScalarArray.Notation
 
 /-!
 # Level 1

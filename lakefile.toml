@@ -5,12 +5,11 @@ testDriver = "BLASTest"
 # Linters that are off by default.
 leanOptions = { linter.missingDocs = true, linter.extra = true }
 
-# Pins an exact scalar-arrays release, since the kernels use the experimental `inplace` notation,
-# which is outside scalar-arrays' stability promise.
+# Pins an exact scalar-arrays release.
 [[require]]
 name = "lean4-scalar-arrays"
 git = "https://github.com/fgdorais/lean4-scalar-arrays"
-rev = "v1.4.0"
+rev = "v1.5.0"
 
 [[lean_lib]]
 name = "BLAS"

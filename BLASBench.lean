@@ -152,7 +152,7 @@ theorem col_le {m j : USize} {a b c : Float64Array} (h : GemmSizes m a b c) (hj 
 /-- The element `off + i` of a column at `off`, for `i < m`. -/
 theorem idx_lt {m off i : USize} {p : Nat} (hw : off.toNat + m.toNat ≤ p) (hi : i < m) :
     (off + i).toNat < p :=
-  ScalarArray.InPlaceSyntax.toNat_add_lt_of_window hw (USize.lt_iff_toNat_lt.mp hi)
+  ScalarArray.Notation.toNat_add_lt_of_window hw (USize.lt_iff_toNat_lt.mp hi)
 
 /--
 `α * A * B + β * C` for `m × m` matrices, by the loops of the naive `gemm`: for each column `j` of

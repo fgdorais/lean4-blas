@@ -21,124 +21,24 @@ namespace BLAS.Float32
 
 /-! ## Two vectors at once -/
 
-/-- `uset` is `set!`. -/
-private theorem uset_eq_set! (a : Float32Array) (i : USize) (v : Float32) (h : i.toNat < a.size) :
-    a.uset i v h = a.set! i.toNat v := by
-  apply ext_getElem (by simp)
-  intro j _ _
-  simp
-
 namespace Vec
 
 variable {n : Nat}
 
 /--
-The loop of `zip`, from the step `i`, up to the bound `m`, which is `n`, on the arrays `a` and `b`
-of sizes `N₁` and `N₂`, at the indices of the strides `sx` and `sy`, given as `USize`s: it writes
-`f u v` over the element `u` of `a` and `g u v` over the element `v` of `b`. It takes the strides
-rather than the vectors, so that it doesn't keep the vectors' arrays alive while it writes to them.
--/
--- `n` comes after `f` and `g`, not from `variable`: with `n` first, the compiler did not specialize
--- the loop to `f` and `g` (checked with Lean v4.36.0-rc2).
-@[specialize] public def zipLoop (f g : Float32 → Float32 → Float32) {n : Nat} (sx sy : Stride) {N₁ N₂ : Nat}
-    (hx : sx.Fits n N₁) (hy : sy.Fits n N₂) (hN₁ : N₁ < USize.size) (hN₂ : N₂ < USize.size)
-    (xo xc yo yc : USize) (hxo : sx.off.toUSize = xo) (hxc : sx.inc.toUSize = xc)
-    (hyo : sy.off.toUSize = yo) (hyc : sy.inc.toUSize = yc) (m : USize) (hm : m.toNat = n)
-    (i : USize) (a b : Float32Array) (ha : a.size = N₁) (hb : b.size = N₂) :
-    Float32Array × Float32Array :=
-  if hi : i < m then
-    have hp : (xo + xc * i).toNat < a.size := by
-      rw [← hxo, ← hxc, ha]; exact Stride.toNat_idx_toUSize_lt hx hN₁ (by grind)
-    have hq : (yo + yc * i).toNat < b.size := by
-      rw [← hyo, ← hyc, hb]; exact Stride.toNat_idx_toUSize_lt hy hN₂ (by grind)
-    let u := a.uget (xo + xc * i) hp
-    let v := b.uget (yo + yc * i) hq
-    zipLoop f g sx sy hx hy hN₁ hN₂ xo xc yo yc hxo hxc hyo hyc m hm (i + 1)
-      (a.uset (xo + xc * i) (f u v) hp) (b.uset (yo + yc * i) (g u v) hq)
-      (by simp [ha]) (by simp [hb])
-  else (a, b)
-termination_by m.toNat - i.toNat
-decreasing_by grind
-
-/-- An element at a later step of a stride is not changed by the steps before. -/
-private theorem getElem_modifyAt_later (A : Float32Array) {s : Stride} {N : Nat}
-    (hs : s.Fits n N) (hA : A.size = N) (G : Nat → Float32 → Float32) {j : Nat} (hj : j < n) :
-    (A.modifyAt s.idx 0 j G)[s.idx j]! = A[s.idx j]! := by
-  have hq : s.idx j < A.size := hA ▸ hs.idx_lt hj
-  rw [getElem!_pos _ _ (by simpa using hq), getElem!_pos A _ hq,
-    getElem_modifyAt_of_forall_ne]
-  intro i _ hi e
-  have := hs.idx_inj (by lia) hj e
-  lia
-
-private theorem zipLoop_eq (f g : Float32 → Float32 → Float32) (sx sy : Stride) {N₁ N₂ : Nat}
-    (hx : sx.Fits n N₁) (hy : sy.Fits n N₂) (hN₁ : N₁ < USize.size) (hN₂ : N₂ < USize.size)
-    (xo xc yo yc : USize) (hxo : sx.off.toUSize = xo) (hxc : sx.inc.toUSize = xc)
-    (hyo : sy.off.toUSize = yo) (hyc : sy.inc.toUSize = yc) (m : USize) (hm : m.toNat = n)
-    (A B : Float32Array) (hA : A.size = N₁) (hB : B.size = N₂)
-    (i : USize) (j : Nat) (hj : i.toNat = j) (hjn : j ≤ n) (a b : Float32Array) (ha hb)
-    (hacc : a = A.modifyAt sx.idx 0 j (fun k u => f u B[sy.idx k]!) ∧
-      b = B.modifyAt sy.idx 0 j (fun k v => g A[sx.idx k]! v)) :
-    zipLoop f g sx sy hx hy hN₁ hN₂ xo xc yo yc hxo hxc hyo hyc m hm i a b ha hb =
-      (A.modifyAt sx.idx 0 n (fun k u => f u B[sy.idx k]!),
-        B.modifyAt sy.idx 0 n (fun k v => g A[sx.idx k]! v)) := by
-  obtain ⟨d, hd⟩ : ∃ d, n - j = d := ⟨_, rfl⟩
-  induction d generalizing i j a b with
-  | zero =>
-    rw [zipLoop, dite_eq_right_of_eq_false (eq_false (by grind))]
-    obtain rfl : j = n := by lia
-    rw [hacc.1, hacc.2]
-  | succ d ih =>
-    have := hx.le_size
-    have hi : i < m := by grind
-    have hjn' : j < n := by lia
-    have hlt : i.toNat < m.toNat := USize.lt_iff_toNat_lt.mp hi
-    have hsucc : (i + 1).toNat = j + 1 := by
-      rw [USize.toNat_add, USize.toNat_one, Nat.mod_eq_of_lt (by lia)]; lia
-    rw [zipLoop, dite_eq_left_of_eq_true (eq_true hi)]
-    have hp := Stride.toNat_idx_toUSize hx hN₁ (i := i) (by lia)
-    have hq := Stride.toNat_idx_toUSize hy hN₂ (i := i) (by lia)
-    rw [hxo, hxc] at hp
-    rw [hyo, hyc] at hq
-    obtain ⟨rfl, rfl⟩ := hacc
-    subst hj
-    apply ih (i + 1) (i.toNat + 1) hsucc (by lia) _ _ _ _ _ (by lia)
-    have ea := getElem_modifyAt_later A hx hA (fun k u => f u B[sy.idx k]!) hjn'
-    have eb := getElem_modifyAt_later B hy hB (fun k v => g A[sx.idx k]! v) hjn'
-    simp only [uset_eq_set!, Float32Array.uget_eq_getElem, hp, hq,
-      modifyAt_succ _ _ (Nat.zero_le _), getElem_eq_getElem!, ea, eb]
-    all_goals trivial
-
-/--
-The arrays of `zip`, as `modifyAt`s: the model of the loop, for arrays too large for it. It is not
-inlined, so that `f` and `g` don't escape into closures in `zipData`, which would keep the compiler
-from specializing `zipLoop` to them.
--/
-@[noinline] public def zipModel (f g : Float32 → Float32 → Float32) (x y : Vec n) :
-    Float32Array × Float32Array :=
-  (x.data.modifyAt x.stride.idx 0 n (fun k u => f u y.data[y.stride.idx k]!),
-    y.data.modifyAt y.stride.idx 0 n (fun k v => g x.data[x.stride.idx k]! v))
-
-/--
 `zip f g x y` writes `f x[i] y[i]` over `x[i]` and `g x[i] y[i]` over `y[i]`, for each `i`, in
-place when the arrays of `x` and `y` are not shared. Both values come from the old elements.
+place when the arrays of `x` and `y` are not shared. Both values come from the old elements. It is
+scalar-arrays' `zipModifyStride`, which checks each array once and then stores without checks.
 -/
 @[inline] public def zipData (f g : Float32 → Float32 → Float32) (x y : Vec n) :
     Float32Array × Float32Array :=
-  if hs : x.data.size < USize.size ∧ y.data.size < USize.size then
-    zipLoop f g x.stride y.stride x.fits y.fits hs.1 hs.2 _ _ _ _ rfl rfl rfl rfl n.toUSize
-      (x.toNat_toUSize hs.1) 0 x.data y.data rfl rfl
-  else zipModel f g x y
+  zipModifyStride x.data y.data x.stride y.stride n f g x.fits y.fits
 
 public theorem zipData_eq (f g : Float32 → Float32 → Float32) (x y : Vec n) :
     zipData f g x y = (x.data.modifyAt x.stride.idx 0 n (fun k u => f u y.data[y.stride.idx k]!),
       y.data.modifyAt y.stride.idx 0 n (fun k v => g x.data[x.stride.idx k]! v)) := by
-  unfold zipData
-  split
-  · exact zipLoop_eq f g _ _ _ _ _ _ _ _ _ _ rfl rfl rfl rfl _ _ _ _ rfl rfl 0 0 (by simp)
-      (by lia) _ _ _ _ ⟨(modifyAt_of_le _ _ (Nat.le_refl _) _).symm,
-        (modifyAt_of_le _ _ (Nat.le_refl _) _).symm⟩
-  · rfl
+  rw [zipData, zipModifyStride_eq, zipModifyAt_eq _ _ _ _
+    (fun _ _ hi _ _ hj e => x.fits.idx_inj hi hj e) (fun _ _ hi _ _ hj e => y.fits.idx_inj hi hj e)]
 
 /--
 `zip f g x y`: the vectors `x` and `y` with `f x[i] y[i]` and `g x[i] y[i]` at `i`.
@@ -301,7 +201,7 @@ namespace Rotmg
 /-- The reference's rescaling factor `GAM`. -/
 @[expose] public def gam : Float32 := 4096
 
-/-- The reference's `GAMSQ`, the literal `1.67772E7` (close to, but not exactly, `gam * gam`). -/
+/-- The reference's `GAMSQ`, the literal `1.67772E7`, a little less than `gam * gam`. -/
 @[expose] public def gamsq : Float32 := 1.67772e7
 
 /-- The reference's `RGAMSQ`, the literal `5.96046E-8` (close to, but not exactly, `1 / gamsq`). -/
