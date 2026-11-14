@@ -115,102 +115,147 @@ public theorem syrkRows_le {lo hi : USize} (h : lo.toNat ≤ hi.toNat) (skip : B
     (syrkRows lo hi skip).toNat ≤ hi.toNat := by
   unfold syrkRows; split <;> simp [h]
 
-/-- The array of `syrk`. -/
-public def syrkData (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32) (C : Mat n n) :
-    Float32Array :=
+/--
+The array of `C` with column `j` of `syrk` done: the triangle's part of the column scaled by `β`,
+then the terms of `α * A[j, l]` times column `l` of `A` added to it, for `l = 0, …, k - 1`. The
+columns run in a separate function, not in a third nested loop, so that the C compiler turns the
+loops into jumps instead of calls, which would use stack for each term.
+-/
+public def syrkColData (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32) (C : Mat n n)
+    (j : Nat) (hj : j < n) : Float32Array :=
   if hs : A.data.size < USize.size ∧ C.data.size < USize.size ∧ n < USize.size ∧
       k < USize.size then
     let nu := n.toUSize
     have hnu : nu.toNat = n := by grind
     let ku := k.toUSize
     have hku : ku.toNat = k := by grind
+    let ju := j.toUSize
+    have hju : ju.toNat = j := by grind
     let c := C.data
     let ao := A.off.toUSize
     let al := A.ld.toUSize
-    let co := C.off.toUSize
-    let cl := C.ld.toUSize
+    let cj := C.off.toUSize + C.ld.toUSize * ju
+    let lo := uplo.loU ju
+    let hi := uplo.hiU nu ju
     (inplace c do
-      for j in 0...nu do
-        let cj := co + cl * j
-        let lo := uplo.loU j
-        let hi := uplo.hiU nu j
-        for i in lo...hi do
+      for i in lo...hi do
+        have hk : (cj + 1 * i).toNat < c.size :=
+          C.toNat_col_index_lt hs.2.1 (lt_of_hiU (u := uplo) (j := ju) hnu (by lia) (by assumption)) (by lia)
+        c[cj + 1 * i] := betaMul β c[cj + 1 * i]
+      for l in 0...ku do
+        let ajl := A.uget ao al rfl rfl hs.1 ju l (by lia) (by lia)
+        let t := α * ajl
+        -- A skipped term runs an empty loop: an `if` would allocate a closure per term.
+        let hi' := syrkRows lo hi (α == 0 || ajl == 0)
+        have hh : hi'.toNat ≤ hi.toNat := syrkRows_le (uplo.loU_le_hiU hnu (by lia)) _
+        for i in lo...hi' do
           have hk : (cj + 1 * i).toNat < c.size :=
-            C.toNat_col_index_lt hs.2.1 (lt_of_hiU (u := uplo) (j := j) hnu (by lia) (by assumption)) (by lia)
-          c[cj + 1 * i] := betaMul β c[cj + 1 * i]
-        for l in 0...ku do
-          let ajl := A.uget ao al rfl rfl hs.1 j l (by lia) (by lia)
-          let t := α * ajl
-          -- A skipped term runs an empty loop: an `if` would allocate a closure per term.
-          let hi' := syrkRows lo hi (α == 0 || ajl == 0)
-          have hh : hi'.toNat ≤ hi.toNat := syrkRows_le (uplo.loU_le_hiU hnu (by lia)) _
-          for i in lo...hi' do
-            have hk : (cj + 1 * i).toNat < c.size :=
-              C.toNat_col_index_lt hs.2.1 (lt_of_hiU (u := uplo) (j := j) hnu (by lia) (by lia)) (by lia)
-            c[cj + 1 * i] := c[cj + 1 * i] +
-              t * A.uget ao al rfl rfl hs.1 i l (lt_of_hiU (u := uplo) (j := j) hnu (by lia) (by lia)) (by lia)).2
-  else mapMat C.data C.off C.ld n 0 n (syrkAt uplo α A β)
+            C.toNat_col_index_lt hs.2.1 (lt_of_hiU (u := uplo) (j := ju) hnu (by lia) (by lia)) (by lia)
+          c[cj + 1 * i] := c[cj + 1 * i] +
+            t * A.uget ao al rfl rfl hs.1 i l (lt_of_hiU (u := uplo) (j := ju) hnu (by lia) (by lia)) (by lia)).2
+  else C.data.modifyAt (Stride.mk (C.off + C.ld * j) 1).idx 0 n fun i v => syrkAt uplo α A β i j v
 
-public theorem syrkData_eq (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32) (C : Mat n n) :
-    syrkData uplo α A β C = mapMat C.data C.off C.ld n 0 n (syrkAt uplo α A β) := by
-  unfold syrkData
+public theorem syrkColData_eq (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32) (C : Mat n n)
+    (j : Nat) (hj : j < n) :
+    syrkColData uplo α A β C j hj =
+      C.data.modifyAt (Stride.mk (C.off + C.ld * j) 1).idx 0 n fun i v => syrkAt uplo α A β i j v := by
+  unfold syrkColData
   split
   · rename_i hs
     have hnu : n.toUSize.toNat = n := by grind
     have hku : k.toUSize.toNat = k := by grind
+    have hju : j.toUSize.toNat = j := by grind
+    have hj' : j.toUSize.toNat < n := by lia
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [Tail.run_forInFrom_unit (F := fun j c =>
-      c.modifyAt (Stride.mk (C.off + C.ld * j) 1).idx 0 n fun i v => syrkAt uplo α A β i j v)
-      (hF := by simp)]
-    · simp only [Tail.run_done, USize.toNat_zero, hnu]
-      rw [iterRange_cols _ _ _ C.le_ld]
-    · intro j _ hj next a h
-      rw [hnu] at hj
-      rw [Tail.run_forInFrom_modify (G := fun _ v => betaMul β v)
-        (idx := (Stride.mk (C.off + C.ld * j.toNat) 1).idx)
-        (he := fun i _ hi => C.toNat_col_index hs.2.1 (lt_of_hiU (u := uplo) hnu hj hi) hj)]
-      · rw [Tail.run_forInFrom_unit (F := fun l c =>
-          c.modifyAt (Stride.mk (C.off + C.ld * j.toNat) 1).idx (uplo.lo j.toNat)
-            (uplo.hi n j.toNat) fun i v => syrkTerm α A l i j.toNat v) (hF := by simp)]
+    rw [Tail.run_forInFrom_modify (G := fun _ v => betaMul β v)
+      (idx := (Stride.mk (C.off + C.ld * j.toUSize.toNat) 1).idx)
+      (he := fun i _ hi => C.toNat_col_index hs.2.1 (lt_of_hiU (u := uplo) hnu hj' hi) hj')]
+    · rw [Tail.run_forInFrom_unit (F := fun l c =>
+        c.modifyAt (Stride.mk (C.off + C.ld * j.toUSize.toNat) 1).idx (uplo.lo j.toUSize.toNat)
+          (uplo.hi n j.toUSize.toNat) fun i v => syrkTerm α A l i j.toUSize.toNat v) (hF := by simp)]
+      · simp only [Tail.run_done, USize.toNat_zero, hku, uplo.toNat_loU, uplo.toNat_hiU hnu hj', hju]
+        rw [iterRange_modifyAt _ _ (col_injOn _ _ _), modifyAt_modifyAt _ _ (col_injOn _ _ _),
+          modifyAt_widen (lo' := 0) (hi' := n) _ _ _ (Nat.zero_le _) (uplo.lo_le_hi hj)
+            (uplo.hi_le hj)]
+        apply modifyAt_congr_fun
+        intro i v _ hi
+        simp only [syrkAt, syrkSumAt]
+        by_cases hc : uplo.contains i j = true
+        · rw [ite_eq_left ((uplo.contains_iff hi).1 hc), ite_eq_left hc]
+        · rw [ite_eq_right (fun h' => hc ((uplo.contains_iff hi).2 h')), ite_eq_right hc]
+      · intro l _ hl next' a' h'
+        rw [hku] at hl
+        have hjl := getElem!_pos A.data (A.off + A.ld * l.toNat + j.toUSize.toNat)
+          (A.index_lt hj' hl)
+        rw [Tail.run_forInFrom_modify
+          (G := fun i v => v + α * A.data[A.off + A.ld * l.toNat + j.toUSize.toNat]! *
+            A.data[A.off + A.ld * l.toNat + i]!)
+          (idx := (Stride.mk (C.off + C.ld * j.toUSize.toNat) 1).idx)
+          (he := fun i _ hi => C.toNat_col_index hs.2.1 (lt_of_hiU (u := uplo) hnu hj'
+            (Nat.lt_of_lt_of_le hi (syrkRows_le (uplo.loU_le_hiU hnu hj') _))) hj')]
         · apply run_congr
-          simp only [USize.toNat_zero, hku, uplo.toNat_loU, uplo.toNat_hiU hnu hj]
-          rw [iterRange_modifyAt _ _ (col_injOn _ _ _), modifyAt_modifyAt _ _ (col_injOn _ _ _),
-            modifyAt_widen (lo' := 0) (hi' := n) _ _ _ (Nat.zero_le _) (uplo.lo_le_hi hj)
-              (uplo.hi_le hj)]
-          apply modifyAt_congr_fun
-          intro i v _ hi
-          simp only [syrkAt, syrkSumAt]
-          by_cases hc : uplo.contains i j.toNat = true
-          · rw [ite_eq_left ((uplo.contains_iff hi).1 hc), ite_eq_left hc]
-          · rw [ite_eq_right (fun h' => hc ((uplo.contains_iff hi).2 h')), ite_eq_right hc]
-        · intro l _ hl next' a' h'
-          rw [hku] at hl
-          have hjl := getElem!_pos A.data (A.off + A.ld * l.toNat + j.toNat) (A.index_lt hj hl)
-          rw [Tail.run_forInFrom_modify
-            (G := fun i v => v + α * A.data[A.off + A.ld * l.toNat + j.toNat]! *
-              A.data[A.off + A.ld * l.toNat + i]!)
-            (idx := (Stride.mk (C.off + C.ld * j.toNat) 1).idx)
-            (he := fun i _ hi => C.toNat_col_index hs.2.1 (lt_of_hiU (u := uplo) hnu hj
-              (Nat.lt_of_lt_of_le hi (syrkRows_le (uplo.loU_le_hiU hnu hj) _))) hj)]
-          · apply run_congr
-            simp only [syrkRows, uplo.toNat_loU, Mat.uget_eq_getElem, Mat.getElem_def, ← hjl]
-            split
-            next h0 =>
-              rw [uplo.toNat_loU, modifyAt_of_le _ _ (Nat.le_refl _),
-                modifyAt_congr_fun _ _ (g' := fun _ v => v)
-                  (fun i v _ _ => by simp [syrkTerm, h0]), modifyAt_id]
-            next h0 =>
-              rw [uplo.toNat_hiU hnu hj]
-              apply modifyAt_congr_fun
-              intro i v _ _
-              simp [syrkTerm, h0]
-          · intro i _ hi v
-            have hi' : i.toNat < n := lt_of_hiU (u := uplo) hnu hj
-              (Nat.lt_of_lt_of_le hi (syrkRows_le (uplo.loU_le_hiU hnu hj) _))
-            simp only [Mat.uget_eq_getElem, Mat.getElem_def, ← hjl,
-              getElem!_pos A.data (A.off + A.ld * l.toNat + i.toNat) (A.index_lt hi' hl)]
-      · intro _ _ _ _; rfl
+          simp only [syrkRows, uplo.toNat_loU, Mat.uget_eq_getElem, Mat.getElem_def, ← hjl]
+          split
+          next h0 =>
+            rw [uplo.toNat_loU, modifyAt_of_le _ _ (Nat.le_refl _),
+              modifyAt_congr_fun _ _ (g' := fun _ v => v)
+                (fun i v _ _ => by rw [hju] at h0; simp [syrkTerm, hju, h0]), modifyAt_id]
+          next h0 =>
+            rw [uplo.toNat_hiU hnu hj']
+            apply modifyAt_congr_fun
+            intro i v _ _
+            rw [hju] at h0
+            simp [syrkTerm, hju, h0]
+        · intro i _ hi v
+          have hi' : i.toNat < n := lt_of_hiU (u := uplo) hnu hj'
+            (Nat.lt_of_lt_of_le hi (syrkRows_le (uplo.loU_le_hiU hnu hj') _))
+          simp only [Mat.uget_eq_getElem, Mat.getElem_def, ← hjl,
+            getElem!_pos A.data (A.off + A.ld * l.toNat + i.toNat) (A.index_lt hi' hl)]
+    · intro _ _ _ _; rfl
   · rfl
+
+/--
+The array of `syrk` from column `j` on, for a matrix with the offset `off` and the leading
+dimension `ld` in the array `c` of size `sz`. It takes them rather than the matrix, so that the
+array isn't shared, and `syrkColData` updates it in place.
+-/
+public def syrkLoop (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32) (off ld sz : Nat)
+    (hld : n ≤ ld) (hsz : n = 0 ∨ n = 0 ∨ off + ld * (n - 1) + n ≤ sz) (j : Nat)
+    (c : Float32Array) (hc : c.size = sz) : Float32Array :=
+  if hj : j < n then
+    syrkLoop uplo α A β off ld sz hld hsz (j + 1)
+      (syrkColData uplo α A β ⟨c, off, ld, hld, by rw [hc]; exact hsz⟩ j hj)
+      (by rw [syrkColData_eq, size_modifyAt]; exact hc)
+  else c
+termination_by n - j
+
+private theorem syrkLoop_eq (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32) (C : Mat n n)
+    (j : Nat) (hj : j ≤ n) (c : Float32Array) (hc : c.size = C.data.size)
+    (hinv : c = mapMat C.data C.off C.ld n 0 j (syrkAt uplo α A β)) :
+    syrkLoop uplo α A β C.off C.ld C.data.size C.le_ld C.bound j c hc =
+      mapMat C.data C.off C.ld n 0 n (syrkAt uplo α A β) := by
+  obtain ⟨e, he⟩ : ∃ e, n - j = e := ⟨_, rfl⟩
+  induction e generalizing j c with
+  | zero =>
+    obtain rfl : j = n := by lia
+    rw [syrkLoop, dite_eq_right (Nat.lt_irrefl _), hinv]
+  | succ e ih =>
+    have hjn : j < n := by lia
+    rw [syrkLoop, dite_eq_left hjn]
+    refine ih (j + 1) hjn _ _ ?_ (by lia)
+    rw [syrkColData_eq]
+    dsimp only
+    rw [hinv]
+    exact modifyAt_col_mapMat _ _ _ C.le_ld j _
+
+/-- The array of `syrk`. -/
+public def syrkData (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32) (C : Mat n n) :
+    Float32Array :=
+  syrkLoop uplo α A β C.off C.ld C.data.size C.le_ld C.bound 0 C.data rfl
+
+public theorem syrkData_eq (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32) (C : Mat n n) :
+    syrkData uplo α A β C = mapMat C.data C.off C.ld n 0 n (syrkAt uplo α A β) :=
+  syrkLoop_eq uplo α A β C 0 (Nat.zero_le _) _ rfl (mapMat_of_le _ _ _ _ _ _ _ (Nat.le_refl _)).symm
 
 /--
 `syrk uplo α A β C` is `α * A * Aᵀ + β * C`, on the triangle `uplo` of `C`, by the loops of the
