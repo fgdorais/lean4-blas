@@ -140,7 +140,7 @@ and `gemm` is the furthest behind. OpenBLAS runs on several threads by default, 
 library runs on one, so on a multi-core machine the gap is larger. These figures are for `Float64`.
 On `Float32`, whose vectors hold twice as many elements, the reductions and `gemm` fall further
 behind OpenBLAS, to about 4 to 5 times slower. `scripts/blas_compare.py`, below, measures both
-comparisons.
+comparisons. [TODO.md](TODO.md) lists possible improvements.
 
 ### Compiler options
 
