@@ -30,9 +30,10 @@ public def main (args : List String) : IO Unit := do
   let n := nums[0]?.getD 1_000_000
   let rounds := nums[1]?.getD 10
   let base ← baseline rounds n
-  let (rows, level2, gemm) ←
+  let (rows, level2, gemm, level3) ←
     if single then BLASBench.Float32.all rounds n else BLASBench.Float64.all rounds n
-  let rows := base :: rows ++ (level2.map (·.1)).flatten ++ (gemm.map (·.1)).flatten
+  let rows := base :: rows ++ (level2.map (·.1)).flatten ++ (gemm.map (·.1)).flatten ++
+    (level3.map (·.1)).flatten
   if tsv then
     for r in rows do
       IO.println s!"{r.name}\t{fmt r.time}"
@@ -64,4 +65,13 @@ public def main (args : List String) : IO Unit := do
       match rs with
       | [r, rb, rl] =>
         IO.println s!"| {m} | {g r.time} | {g rb.time} | {g rl.time} | {(r.ref.map g).getD "—"} |"
+      | _ => pure ()
+    IO.println "\n`syrk` and `trsm` of square matrices, in GFLOP/s.\n"
+    IO.println "| Size | syrk, lower | syrkT, lower | trsm, lower | trsmRight, upper |"
+    IO.println "|--:|--:|--:|--:|--:|"
+    for (rs, flops) in level3, m in level3Sizes do
+      let g (t : Float) := fmt (flops.toFloat / (t * 1e6))
+      match rs with
+      | [s, t, l, r] =>
+        IO.println s!"| {m} | {g s.time} | {g t.time} | {g l.time} | {g r.time} |"
       | _ => pure ()

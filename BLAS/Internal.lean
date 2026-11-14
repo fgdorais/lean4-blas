@@ -55,4 +55,19 @@ private theorem toNat_mul_add_eq {x y z : USize} {X Y : Nat} (hx : x.toNat = X) 
   have : X * y.toNat + X ≤ X * Y := by rw [← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hy
   grind
 
+/-- The elements of two distinct columns of a column-major matrix are at distinct indices. -/
+private theorem col_index_ne {off ld m i j i' j' : Nat} (hi : i < m) (hi' : i' < m) (hml : m ≤ ld)
+    (hj : j ≠ j') : off + ld * j + i ≠ off + ld * j' + i' := by
+  rcases Nat.lt_or_gt_of_ne hj with h | h
+  · have : ld * (j + 1) ≤ ld * j' := Nat.mul_le_mul_left _ h
+    rw [Nat.mul_succ] at this; lia
+  · have : ld * (j' + 1) ≤ ld * j := Nat.mul_le_mul_left _ h
+    rw [Nat.mul_succ] at this; lia
+
+/-- The steps of a stride of `1`, such as the rows of a column of a matrix, are distinct. -/
+private theorem col_injOn (o lo hi : Nat) :
+    ∀ i, lo ≤ i → i < hi → ∀ j, lo ≤ j → j < hi →
+      (ScalarArray.Stride.mk o 1).idx i = (ScalarArray.Stride.mk o 1).idx j → i = j :=
+  fun _ _ _ _ _ _ e => by simp only [ScalarArray.Stride.idx] at e; lia
+
 end BLAS
