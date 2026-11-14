@@ -59,14 +59,6 @@ private theorem getElem!_mapMat_col_of_not (a : Float64Array) (off ld lo hi : Na
         · exact col_index_ne hl hi' hml hjj e') hq]
   · rw [getElem!_neg _ _ (by rw [size_mapMat]; exact hq), getElem!_neg a _ hq]
 
-/-- An element of a column `j` of a `mapMat` is mapped. -/
-private theorem getElem!_mapMat_col (a : Float64Array) (off ld lo hi : Nat)
-    (g : Nat → Nat → Float → Float) (hml : m ≤ ld) {j : Nat} (hj : lo ≤ j ∧ j < hi) {l : Nat}
-    (hl : l < m) (hq : off + ld * j + l < a.size) :
-    (mapMat a off ld m lo hi g)[off + ld * j + l]! = g l j a[off + ld * j + l]! := by
-  rw [getElem!_pos _ _ (by rw [size_mapMat]; exact hq), getElem!_pos a _ hq,
-    getElem_mapMat_index _ _ _ _ _ _ _ hl hml hj hq]
-
 /-! ## The solutions of `trsv` depend only on the elements of the vector -/
 
 theorem trsvLower_congr (d : Diag) (A : Mat n n) {x y : Vec n}
@@ -211,28 +203,6 @@ theorem run_colScaleT {sz : Nat} {γ : Type} (α : Float) (mu : USize) (hmu : mu
   · intro _ _ _ _; rfl
 
 
-
-/-- `set!` of an element of a column of a `mapMat` sets it in its function. -/
-private theorem set!_mapMat_col (s : Float64Array) (off ld : Nat) (hml : m ≤ ld) {lo hi c : Nat}
-    (hc : lo ≤ c ∧ c < hi) {r : Nat} (hr : r < m) (g : Nat → Nat → Float → Float) (x : Float) :
-    (mapMat s off ld m lo hi g).set! (off + ld * c + r) x =
-      mapMat s off ld m lo hi fun i k v => if k = c ∧ r ≤ i ∧ i < r + 1 then x else g i k v := by
-  rw [← modifyAt_col_mapMat_mid s off ld hml hc (r₀ := r) (r₁ := r + 1) hr g (fun _ _ => x),
-    modifyAt_succ _ _ (Nat.le_refl r), modifyAt_self]
-  simp [Stride.idx]
-
-/-- `set!` of an element of a column of a `mapMat` to a function of it maps it in its function. -/
-private theorem set!_mapMat_col_fun (s : Float64Array) (off ld : Nat) (hml : m ≤ ld)
-    {lo hi c : Nat} (hc : lo ≤ c ∧ c < hi) {r : Nat} (hr : r < m)
-    (hp : off + ld * c + r < s.size) (g : Nat → Nat → Float → Float) (G : Float → Float) {x : Float}
-    (hx : x = G (g r c s[off + ld * c + r]!)) :
-    (mapMat s off ld m lo hi g).set! (off + ld * c + r) x =
-      mapMat s off ld m lo hi fun i k v =>
-        if k = c ∧ r ≤ i ∧ i < r + 1 then G (g i k v) else g i k v := by
-  rw [← modifyAt_col_mapMat_mid s off ld hml hc (r₀ := r) (r₁ := r + 1) hr g (fun _ => G),
-    modifyAt_succ _ _ (Nat.le_refl r), modifyAt_self]
-  simp only [Stride.idx, Nat.one_mul]
-  rw [getElem!_mapMat_col s off ld lo hi g hml hc hr hp, hx]
 
 /-- Row `r` of the four columns at `o₀` to `o₃`: element `q` less `t q * a`. -/
 def rowSub4 (o₀ o₁ o₂ o₃ r : Nat) (t₀ t₁ t₂ t₃ a : Float) (s : Float64Array) : Float64Array :=

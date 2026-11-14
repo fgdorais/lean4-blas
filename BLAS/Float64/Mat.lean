@@ -423,6 +423,97 @@ public theorem mapMat_mapMat_adj (a : Float64Array) (off ld : Nat) {lo mid hi : 
       · rw [ite_eq_right (by lia), ite_eq_right (by lia)]
   · rw [ite_eq_right (by lia), ite_eq_right (by lia), ite_eq_right (by lia)]
 
+/-- An element of a column `j` of a `mapMat` is mapped. -/
+public theorem getElem!_mapMat_col (a : Float64Array) (off ld lo hi : Nat)
+    (g : Nat → Nat → Float → Float) (hml : m ≤ ld) {j : Nat} (hj : lo ≤ j ∧ j < hi) {l : Nat}
+    (hl : l < m) (hq : off + ld * j + l < a.size) :
+    (mapMat a off ld m lo hi g)[off + ld * j + l]! = g l j a[off + ld * j + l]! := by
+  rw [getElem!_pos _ _ (by rw [size_mapMat]; exact hq), getElem!_pos a _ hq,
+    getElem_mapMat_index _ _ _ _ _ _ _ hl hml hj hq]
+
+/-- `set!` of an element of a column of a `mapMat` sets it in its function. -/
+public theorem set!_mapMat_col (s : Float64Array) (off ld : Nat) (hml : m ≤ ld) {lo hi c : Nat}
+    (hc : lo ≤ c ∧ c < hi) {r : Nat} (hr : r < m) (g : Nat → Nat → Float → Float) (x : Float) :
+    (mapMat s off ld m lo hi g).set! (off + ld * c + r) x =
+      mapMat s off ld m lo hi fun i k v => if k = c ∧ r ≤ i ∧ i < r + 1 then x else g i k v := by
+  rw [← modifyAt_col_mapMat_mid s off ld hml hc (r₀ := r) (r₁ := r + 1) hr g (fun _ _ => x),
+    modifyAt_succ _ _ (Nat.le_refl r), modifyAt_self]
+  simp [Stride.idx]
+
+/-- `set!` of an element of a column of a `mapMat` to a function of it maps it in its function. -/
+public theorem set!_mapMat_col_fun (s : Float64Array) (off ld : Nat) (hml : m ≤ ld)
+    {lo hi c : Nat} (hc : lo ≤ c ∧ c < hi) {r : Nat} (hr : r < m)
+    (hp : off + ld * c + r < s.size) (g : Nat → Nat → Float → Float) (G : Float → Float) {x : Float}
+    (hx : x = G (g r c s[off + ld * c + r]!)) :
+    (mapMat s off ld m lo hi g).set! (off + ld * c + r) x =
+      mapMat s off ld m lo hi fun i k v =>
+        if k = c ∧ r ≤ i ∧ i < r + 1 then G (g i k v) else g i k v := by
+  rw [← modifyAt_col_mapMat_mid s off ld hml hc (r₀ := r) (r₁ := r + 1) hr g (fun _ => G),
+    modifyAt_succ _ _ (Nat.le_refl r), modifyAt_self]
+  simp only [Stride.idx, Nat.one_mul]
+  rw [getElem!_mapMat_col s off ld lo hi g hml hc hr hp, hx]
+
+/--
+The rows `r₀` to `r₁ - 1` of two columns `c₀ ≠ c₁` of a `mapMat`, mapped a row of the two at a time
+by `f₀` and `f₁`, from the elements before each row's writes, map them in its function.
+-/
+public theorem iterRange_rows2_mapMat (s : Float64Array) (off ld : Nat) (hml : m ≤ ld)
+    {lo hi c₀ c₁ : Nat} (h₀ : lo ≤ c₀ ∧ c₀ < hi) (h₁ : lo ≤ c₁ ∧ c₁ < hi) (hne : c₀ ≠ c₁)
+    (hq₀ : off + ld * c₀ + m ≤ s.size) (hq₁ : off + ld * c₁ + m ≤ s.size) {r₀ r₁ : Nat}
+    (hr : r₁ ≤ m) (g : Nat → Nat → Float → Float) (f₀ f₁ : Nat → Float → Float) :
+    iterRange (fun i t => (t.set! (off + ld * c₀ + i) (f₀ i t[off + ld * c₀ + i]!)).set!
+        (off + ld * c₁ + i) (f₁ i t[off + ld * c₁ + i]!)) r₀ r₁ (mapMat s off ld m lo hi g) =
+      mapMat s off ld m lo hi fun i c v =>
+        if r₀ ≤ i ∧ i < r₁ then
+          (if c = c₀ then f₀ i (g i c v) else if c = c₁ then f₁ i (g i c v) else g i c v)
+        else g i c v := by
+  by_cases hle : r₁ ≤ r₀
+  · rw [iterRange_of_le _ hle]
+    apply mapMat_congr
+    intro i c v _ _ _
+    rw [ite_eq_right (by lia)]
+  obtain ⟨d, rfl⟩ : ∃ d, r₁ = r₀ + d := ⟨r₁ - r₀, by lia⟩
+  induction d with
+  | zero =>
+    rw [Nat.add_zero, iterRange_self]
+    apply mapMat_congr
+    intro i c v _ _ _
+    rw [ite_eq_right (by lia)]
+  | succ d ih =>
+    rw [← Nat.add_assoc, iterRange_succ _ (Nat.le_add_right r₀ d)]
+    by_cases hd : d = 0
+    · subst hd
+      rw [Nat.add_zero, iterRange_self]
+      rw [set!_mapMat_col_fun s off ld hml h₀ (by lia) (by lia) g (f₀ r₀)
+          (by rw [getElem!_mapMat_col s off ld lo hi g hml h₀ (by lia) (by lia)]),
+        set!_mapMat_col_fun s off ld hml h₁ (by lia) (by lia) _ (f₁ r₀)
+          (by rw [getElem!_mapMat_col s off ld lo hi g hml h₁ (by lia) (by lia)]; simp [Ne.symm hne])]
+      apply mapMat_congr
+      intro i c v _ _ _
+      by_cases hi : i = r₀
+      · subst hi
+        by_cases hc₀ : c = c₀
+        · subst hc₀; simp [hne]
+        · by_cases hc₁ : c = c₁ <;> simp [hc₀, hc₁, Ne.symm hne]
+      · simp [show ¬(r₀ ≤ i ∧ i < r₀ + 1) by lia]
+    rw [ih (by lia) (by lia)]
+    rw [set!_mapMat_col_fun s off ld hml h₀ (by lia) (by lia) _ (f₀ (r₀ + d))
+        (by rw [getElem!_mapMat_col s off ld lo hi _ hml h₀ (by lia) (by lia)]),
+      set!_mapMat_col_fun s off ld hml h₁ (by lia) (by lia) _ (f₁ (r₀ + d))
+        (by rw [getElem!_mapMat_col s off ld lo hi _ hml h₁ (by lia) (by lia)]
+            simp [show ¬r₀ + d < r₀ + d by lia, Ne.symm hne])]
+    apply mapMat_congr
+    intro i c v _ _ _
+    by_cases hi : i = r₀ + d
+    · subst hi
+      by_cases hc₀ : c = c₀
+      · subst hc₀; simp [hne]
+      · by_cases hc₁ : c = c₁ <;> simp [hc₀, hc₁, Ne.symm hne]
+    · by_cases hin : r₀ ≤ i ∧ i < r₀ + d
+      · simp [hin, show i < r₀ + d + 1 by lia, show ¬r₀ + d ≤ i by lia]
+      · simp [show ¬(r₀ + d ≤ i ∧ i < r₀ + d + 1) by lia,
+          show ¬(r₀ ≤ i ∧ i < r₀ + d + 1) by lia, show ¬(r₀ ≤ i ∧ i < r₀ + d) by lia]
+
 /-- Steps that each map column `j` of a matrix, as a stride of `1`, map the whole matrix. -/
 public theorem iterRange_cols (a : Float64Array) (off ld : Nat) (hml : m ≤ ld) (n : Nat)
     (G : Nat → Nat → Float → Float) :
