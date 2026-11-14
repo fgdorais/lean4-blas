@@ -41,6 +41,11 @@ goes on to a routine, and doesn't keep the array alive past it.
   | [a, b, c] => a == inf && b.isNaN && c.isNaN
   | _ => false
 
+-- As in the reference BLAS, `α = 0` returns `y` without reading `x`.
+#guard
+  let inf : Float32 := 1 / 0
+  (Vec.axpy 0 (.ofList (n := 2) [inf, 0 / 0]) (.ofList (n := 2) [1, 2])).toList == [1, 2]
+
 /-- Whether `axpy` updates an unshared `y` in place. -/
 def axpyInPlace (n : Nat) : Bool :=
   let (p, y) := withAddr (ramp n)
@@ -106,6 +111,20 @@ def copyInPlace (n : Nat) : Bool :=
 #guard Vec.nrm2 (.ofList (n := 2) [3, -4]) == 5
 #guard Vec.nrm2 (ramp 0) == 0
 
+-- `nrm2` scales big and small elements, so it overflows or underflows only when the norm does.
+#guard Vec.nrm2 (.ofList (n := 2) [Float32.scaleB 3 80, Float32.scaleB (-4) 80]) == Float32.scaleB 5 80
+#guard Vec.nrm2 (.ofList (n := 2) [Float32.scaleB 3 (-80), Float32.scaleB 4 (-80)]) ==
+  Float32.scaleB 5 (-80)
+#guard Vec.nrm2 (.ofList (n := 3) [Float32.scaleB 3 124, Float32.scaleB 4 124, 1]) ==
+  Float32.scaleB 5 124
+#guard Vec.nrm2 (.ofList (n := 3) [Float32.scaleB 3 (-140), Float32.scaleB 4 (-140), 0]) ==
+  Float32.scaleB 5 (-140)
+#guard Vec.nrm2 (.ofList (n := 2) [1e-30, 1]) == 1
+#guard Vec.nrm2 (.ofList (n := 2) [1e30, 1e30]) < 1 / 0
+#guard Vec.nrm2 (.ofList (n := 2) [1, 1 / 0]) == 1 / 0
+#guard (Vec.nrm2 (.ofList (n := 3) [1, 0 / 0, 1 / 0])).isNaN
+#guard (Vec.nrm2 (.ofList (n := 2) [1e-30, 0 / 0])).isNaN
+
 -- The sums run from the left, in the order of the spec.
 #guard
   let n := 70000
@@ -119,7 +138,9 @@ def copyInPlace (n : Nat) : Bool :=
 #guard Vec.iamax (ramp 0) == 0
 #guard Vec.iamax (ramp 70000) == 69999
 #guard Vec.iamax (.ofList (n := 3) [0 / 0, 5, 7]) == 0
-#guard Vec.iamax (.ofList (n := 3) [1, 0 / 0, 7]) == 2
+-- As in the reference BLAS (after LAPACK 3.12.1), the first `NaN` wins.
+#guard Vec.iamax (.ofList (n := 3) [1, 0 / 0, 7]) == 1
+#guard Vec.iamax (.ofList (n := 4) [1, 9, 0 / 0, 0 / 0]) == 2
 #guard Vec.iamax (.ofList (n := 3) [1, -1 / 0, 7]) == 1
 
 /-! ## Strided vectors -/
@@ -173,3 +194,102 @@ def axpyInPlaceStrided (n : Nat) : Bool :=
 #guard Vec.asum (strided 4 2 5 (-1)) == 6
 #guard Vec.nrm2 (strided 2 7 2 1) == 1
 #guard Vec.iamax (strided 6 1 2 (-1)) == 5
+
+/-! ## Rotations -/
+
+#guard
+  let (x, y) := Vec.rot 0.6 0.8 (.ofList (n := 2) [1, 2]) (.ofList (n := 2) [3, 4])
+  x.toList == [0.6 * 1 + 0.8 * 3, 0.6 * 2 + 0.8 * 4] && y.toList == [0.6 * 3 - 0.8 * 1, 0.6 * 4 - 0.8 * 2]
+-- Both new elements come from the old ones.
+#guard
+  let (x, y) := Vec.rot 0 1 (ramp 4) (ramp 4 2)
+  x.toList == (ramp 4 2).toList && y.toList == (ramp 4 (-1)).toList
+#guard (Vec.rot 0 1 (ramp 0) (ramp 0)).1.toList == []
+#guard
+  let (x, y) := Vec.rot 0 2 (strided 5 1 3) (strided 5 2 2 2)
+  x.toList == (ramp 5 4).toList && y.toList == (ramp 5 (-2)).toList &&
+    outside x == outside (strided 5 1 3) && outside y == outside (strided 5 2 2)
+
+/-- Whether `rot` updates unshared `x` and `y` in place. -/
+def rotInPlace (n : Nat) : Bool :=
+  let (p, x) := withAddr (ramp n)
+  let (q, y) := withAddr (strided n 1 3)
+  let (x, y) := Vec.rot 0.6 0.8 x y
+  BLASTest.addr x.data == p && BLASTest.addr y.data == q
+
+#guard rotInPlace 8
+
+-- Shared `x` and `y` are copied, and keep their elements.
+#guard
+  let x := ramp 8
+  let y := ramp 8 2
+  let (x', y') := Vec.rot 0 1 x y
+  x.toList == (ramp 8).toList && y.toList == (ramp 8 2).toList && x'.toList == (ramp 8 2).toList &&
+    y'.toList == (ramp 8 (-1)).toList
+
+#guard
+  let p : RotmParam := { flag := -2, h11 := 7, h21 := 7, h12 := 7, h22 := 7 }
+  let (x, y) := Vec.rotm p (ramp 3) (ramp 3 2)
+  x.toList == (ramp 3).toList && y.toList == (ramp 3 2).toList
+#guard
+  let p : RotmParam := { flag := -1, h11 := 1, h21 := 2, h12 := 3, h22 := 4 }
+  let (x, y) := Vec.rotm p (.ofList (n := 1) [1]) (.ofList (n := 1) [10])
+  x.toList == [31] && y.toList == [42]
+-- Flag `0` reads only `h21` and `h12`, and flag `1` only `h11` and `h22`.
+#guard
+  let p : RotmParam := { flag := 0, h11 := 0 / 0, h21 := 2, h12 := 3, h22 := 0 / 0 }
+  let (x, y) := Vec.rotm p (.ofList (n := 1) [1]) (.ofList (n := 1) [10])
+  x.toList == [31] && y.toList == [12]
+#guard
+  let p : RotmParam := { flag := 1, h11 := 2, h21 := 0 / 0, h12 := 0 / 0, h22 := 3 }
+  let (x, y) := Vec.rotm p (.ofList (n := 1) [1]) (.ofList (n := 1) [10])
+  x.toList == [12] && y.toList == [29]
+
+/-- Whether `rotm` updates unshared `x` and `y` in place. -/
+def rotmInPlace (n : Nat) : Bool :=
+  let (p, x) := withAddr (ramp n)
+  let (q, y) := withAddr (ramp n 2)
+  let (x, y) := Vec.rotm { flag := -1, h11 := 1, h21 := 2, h12 := 3, h22 := 4 } x y
+  BLASTest.addr x.data == p && BLASTest.addr y.data == q
+
+#guard rotmInPlace 8
+
+#guard
+  let g := rotg 3 4
+  g.r == 5 && g.c == 0.6 && g.s == 0.8 && g.z == 1 / 0.6
+#guard
+  let g := rotg 4 (-3)
+  g.r == 5 && g.c == 0.8 && g.s == -0.6 && g.z == -0.6
+-- `r` takes the sign of the larger of `a` and `b`.
+#guard
+  let g := rotg 3 (-4)
+  g.r == -5 && g.c == -0.6 && g.s == 0.8
+#guard
+  let g := rotg 2 0
+  g.r == 2 && g.c == 1 && g.s == 0 && g.z == 0
+#guard
+  let g := rotg 0 (-2)
+  g.r == -2 && g.c == 0 && g.s == 1 && g.z == 1
+-- No overflow or underflow in `r`.
+#guard (rotg (Float32.scaleB 3 120) (Float32.scaleB 4 120)).r == Float32.scaleB 5 120
+#guard (rotg (Float32.scaleB 3 (-120)) (Float32.scaleB 4 (-120))).r == Float32.scaleB 5 (-120)
+
+#guard
+  let m := rotmg 1 1 3 0
+  m.param.flag == -2 && m.d1 == 1 && m.d2 == 1 && m.x1 == 3
+#guard
+  let m := rotmg (-1) 1 3 4
+  m.param.flag == -1 && m.d1 == 0 && m.d2 == 0 && m.x1 == 0
+#guard
+  let m := rotmg 1 1 2 1
+  m.param.flag == 0 && m.param.h21 == -0.5 && m.param.h12 == 0.5 && m.d1 == 0.8 && m.d2 == 0.8 &&
+    m.x1 == 2.5
+#guard
+  let m := rotmg 1 1 1 2
+  m.param.flag == 1 && m.param.h11 == 0.5 && m.param.h22 == 0.5 && m.d1 == 0.8 && m.d2 == 0.8 &&
+    m.x1 == 2.5
+-- Rescaling writes out the implied entries and sets the flag to `-1`.
+#guard
+  let m := rotmg (Float32.scaleB 1.25 30) (Float32.scaleB 1.25 30) 2 1
+  m.param.flag == -1 && m.param.h11 == 4096 && m.param.h21 == -2048 && m.param.h12 == 2048 &&
+    m.param.h22 == 4096 && m.d1 == 64 && m.d2 == 64 && m.x1 == 2.5 * 4096
