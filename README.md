@@ -70,8 +70,8 @@ the reference `drotmg` loops forever, when `d1` or `d2` is or becomes infinite, 
 dimension `ld ≥ m`, as in the reference BLAS: `A[(i, j)]` is at the index `off + ld * j + i`.
 `Mat.ofFn` makes a packed matrix (`off = 0`, `ld = m`), and `Mat.ofLd? a off ld` makes a view of
 the array `a`, such as a block of a larger matrix. `A.col j` and `A.row i` are vectors over the
-same array, with no copy. `Mat.gemm α A B β C`, for `A : Mat m k`, `B : Mat k n` and `C : Mat m n`, is
-`α * A * B + β * C`, over `C`, in the order of the reference BLAS:
+same array, with no copy. `Mat.gemm α A B β C`, for `A : Mat m k`, `B : Mat k n` and
+`C : Mat m n`, is `α * A * B + β * C`, over `C`, in the order of the reference BLAS:
 
 ```lean
 (gemm α A B β C)[(i, j)] =
@@ -84,28 +84,29 @@ where `betaMul β v` is `β * v`, or `0` when `β = 0`: as in the reference BLAS
 reading `A` or `B`. `data_gemm` gives the whole array of the result, so the elements outside `C`
 are unchanged.
 
-`Mat.gemmBlocked` computes the same matrix about twice as fast. It works on blocks of 256 rows and
-128 terms, and sweeps the rows of a block for two columns of `C` and four terms at a time, which
-the C compiler vectorizes. Each element still gets its terms in the order of the specification, so
-`gemmBlocked_eq_gemm` proves that the result is the same to the bit.
+`gemm` works on blocks of 256 rows and 128 terms, and sweeps the rows of a block for two columns
+of `C` and four terms at a time, which the C compiler vectorizes. Each element still gets its terms
+in the order of the specification. `Mat.gemmNaive` runs the naive loops of the reference BLAS, about
+half as fast, and `gemm_eq_gemmNaive` proves that the results are the same to the bit.
 
 Both run their kernels on packed matrices, `PMat m n`. A packed `Mat` goes to the kernel as it is,
 and a packed `C` is updated in place. Any other matrix is packed into a copy first, one `memmove`
 per column, and the columns of the result are copied back into `C`'s array.
 
-The Level 2 routines run the loops of the reference BLAS directly on any `Mat` and `Vec`, with no
-packing, and their specifications are exact in the same way:
+The Level 2 routines run directly on any `Mat` and `Vec`, with no packing. Each element gets the
+operations of the reference BLAS in its order, although `gemv` and `gemvT` handle four columns of
+`A` per loop, and their specifications are exact in the same way:
 
 | Routine | Result | Specification |
 |---|---|---|
 | `gemv α A x β y` | `α * A * x + β * y`, over `y` | `Nat.fold n (fun j _ s => s + α * x[j] * A[(i, j)]) (betaMul β y[i])` |
 | `gemvT α A x β y` | `α * Aᵀ * x + β * y`, over `y` | `betaMul β y[j] + α * Nat.fold m (fun i _ s => s + A[(i, j)] * x[i]) 0` |
 | `ger α x y A` | `α * x * yᵀ + A`, over `A` | `A[(i, j)] + x[i] * (α * y[j])`, or `A[(i, j)]` if `α = 0` or `y[j] = 0` |
+| `trsv uplo diag A x` | `A⁻¹ * x` for a triangular `A`, over `x` | `getElem_trsv_lower`, `getElem_trsv_upper` |
 
 These are the general cases. As in the reference BLAS, `gemv` and `gemvT` return `y` when the sum
 is empty (`n = 0`, resp. `m = 0`), only scale `y` when `α = 0`, and set it to `0` without reading
 it when `β = 0`; `ger` skips the columns with `y[j] = 0`. The `getElem_` lemmas state every case.
-| `trsv uplo diag A x` | `A⁻¹ * x` for a triangular `A`, over `x` | `getElem_trsv_lower`, `getElem_trsv_upper` |
 
 `trsv` takes the triangle as a `Uplo` (`.upper` or `.lower`) and the diagonal as a `Diag` (`.unit`
 or `.nonUnit`), and reads nothing else of `A`. Its specification is back substitution, in the order of
@@ -117,6 +118,39 @@ y[i] = d.apply (Nat.fold i (fun l _ s => s - y[l] * A[(i, l)]) x[i]) A[(i, i)]
 
 where `d.apply v a` is `v / a`, or `v` for a unit diagonal. For the upper triangle, the terms run
 from `l = n - 1` down to `i + 1`.
+
+## Conformance
+
+The target is the behavior of the reference BLAS, as in the current `master` branch of
+[Reference-LAPACK](https://github.com/Reference-LAPACK/lapack), rather than its last release. Each
+routine computes every element with the operations of the reference implementation, in the same
+order, so that the result is exact to the bit, and its specification says so. Where a routine still
+differs from the reference BLAS, such as `iamax` counting from `0`, its documentation says how.
+
+## Performance
+
+Speed comes second to proofs, and it is measured rather than promised. On the machines measured
+so far, the routines match the reference BLAS on Level 1 and surpass it on Level 2, and `gemm` is
+about 4 times faster than its `dgemm`.
+
+Against OpenBLAS on one thread, we don't expect any routine to be more than about 5 times slower.
+The Level 1 updates and the Level 2 routines run at about its speed, the reductions such as `dot`
+and `iamax` at about half its speed, since their specifications fix the order of their operations,
+and `gemm` is the furthest behind. OpenBLAS runs on several threads by default, and this
+library runs on one, so on a multi-core machine the gap is larger. `scripts/blas_compare.py`,
+below, measures both comparisons.
+
+### Compiler options
+
+The library is compiled with Lean's default C compiler options, which target the baseline
+instruction set of the platform, so that its binaries run on any machine of that architecture.
+They include `-ffp-contract=off`, which keeps the C compiler from fusing a multiplication and an
+addition into one rounding: the specifications depend on it. Never compile the library with
+`-ffast-math`, `-ffp-contract=fast` or similar options, which change the results.
+
+The lakefile adds `-falign-loops=64`, so that a loop's speed doesn't depend on where unrelated code
+moves it. Adding `-march=native` to `moreLeancArgs` in `lakefile.toml` gives a modest speedup on
+Level 2 and `gemm`, but the binaries then only run on CPUs like the one that built them.
 
 ## Installation
 
@@ -157,6 +191,19 @@ translated by a table in the script, which fails if such text is left over.
 `python3 scripts/generate.py --check` changes nothing and fails if a generated file is out of date;
 CI runs it. The generated files are marked `linguist-generated` in `.gitattributes`, so GitHub
 collapses them in diffs.
+
+To compare with a C BLAS, such as OpenBLAS or Netlib's reference BLAS, build
+`scripts/cblas_bench.c`, which runs the same benchmarks through the CBLAS interface of a shared
+library that it loads at run time, and pass both outputs to `scripts/blas_compare.py`:
+
+```
+cc -O2 -o cblas_bench scripts/cblas_bench.c -ldl
+lake exe bench --tsv > lean.tsv
+OPENBLAS_NUM_THREADS=1 ./cblas_bench /usr/lib/x86_64-linux-gnu/libopenblas.so.0 > openblas.tsv
+python3 scripts/blas_compare.py lean.tsv OpenBLAS=openblas.tsv
+```
+
+This is only a script: the library itself has no C dependency.
 
 You can generate the documentation locally with `lake build BLAS:docs` in the `docs` directory.
 

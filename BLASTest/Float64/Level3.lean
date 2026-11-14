@@ -70,13 +70,13 @@ def gemmMatchesModel (m n k : Nat) (α β : Float) : Bool :=
 #guard
   let C : Mat 1 1 := Mat.ofPMat ⟨.ofList [0 / 0], by decide⟩
   (Mat.gemm 1 (mat 1 1) (mat 1 1) 0 C).toList == [(mat 1 1)[(0, 0)] * (mat 1 1)[(0, 0)]] &&
-    (Mat.gemmBlocked 1 (mat 1 1) (mat 1 1) 0 C).toList == [(mat 1 1)[(0, 0)] * (mat 1 1)[(0, 0)]]
+    (Mat.gemmNaive 1 (mat 1 1) (mat 1 1) 0 C).toList == [(mat 1 1)[(0, 0)] * (mat 1 1)[(0, 0)]]
 
 -- `α = 0` only scales `C`, without reading `A` or `B`.
 #guard
   let A : Mat 1 1 := .ofFn fun _ _ => 0 / 0
   let C : Mat 1 1 := .ofFn fun _ _ => 3
-  (Mat.gemm 0 A A 2 C).toList == [6] && (Mat.gemmBlocked 0 A A 0 C).toList == [0]
+  (Mat.gemm 0 A A 2 C).toList == [6] && (Mat.gemmNaive 0 A A 0 C).toList == [0]
 
 /-- Whether `gemm` updates an unshared `C` in place. -/
 def gemmInPlace (m : Nat) : Bool :=
@@ -91,47 +91,47 @@ def gemmInPlace (m : Nat) : Bool :=
   let D := Mat.gemm 1 (mat 4 4 1) (mat 4 4 2) 1 C
   C.toList == (mat 4 4 3).toList && D.toList == gemmModelList 1 (mat 4 4 1) (mat 4 4 2) 1 C
 
-/-! ## `gemmBlocked` -/
+/-! ## `gemmNaive` -/
 
-/-- Whether `gemmBlocked` computes the same matrix as `gemm`, for these shapes. -/
-def gemmBlockedMatches (m n k : Nat) (α β : Float) : Bool :=
+/-- Whether `gemm` computes the same matrix as `gemmNaive`, to the bit, for these shapes. -/
+def gemmNaiveMatches (m n k : Nat) (α β : Float) : Bool :=
   let A := mat m k 1
   let B := mat k n 2
   let C := mat m n 3
-  let D := (Mat.gemmBlocked α A B β C).data
-  let E := (Mat.gemm α A B β C).data
+  let D := (Mat.gemm α A B β C).data
+  let E := (Mat.gemmNaive α A B β C).data
   D.size == E.size && (List.range D.size).all fun i => D[i]! == E[i]!
 
 #guard
   let A : Mat 2 2 := Mat.ofPMat ⟨.ofList [1, 3, 2, 4], by decide⟩
   let B : Mat 2 2 := Mat.ofPMat ⟨.ofList [5, 7, 6, 8], by decide⟩
-  (Mat.gemmBlocked 1 A B 0 (mat 2 2)).toList == [19, 43, 22, 50]
+  (Mat.gemmNaive 1 A B 0 (mat 2 2)).toList == [19, 43, 22, 50]
 
--- Odd shapes cover the last column, the leftover terms and the last row block.
-#guard gemmBlockedMatches 5 4 3 1.5 0.5
-#guard gemmBlockedMatches 1 1 1 2 3
-#guard gemmBlockedMatches 17 9 13 (-0.25) 2
-#guard gemmBlockedMatches 63 7 130 1 1
-#guard gemmBlockedMatches 257 3 129 0.5 (-1)
-#guard gemmBlockedMatches 300 5 260 1.25 0.75
+-- Odd shapes cover the last column, the leftover terms and the last row block of `gemm`.
+#guard gemmNaiveMatches 5 4 3 1.5 0.5
+#guard gemmNaiveMatches 1 1 1 2 3
+#guard gemmNaiveMatches 17 9 13 (-0.25) 2
+#guard gemmNaiveMatches 63 7 130 1 1
+#guard gemmNaiveMatches 257 3 129 0.5 (-1)
+#guard gemmNaiveMatches 300 5 260 1.25 0.75
 
 -- Empty shapes.
-#guard gemmBlockedMatches 0 3 2 1 1
-#guard gemmBlockedMatches 3 0 2 1 1
-#guard gemmBlockedMatches 3 2 0 1 2
+#guard gemmNaiveMatches 0 3 2 1 1
+#guard gemmNaiveMatches 3 0 2 1 1
+#guard gemmNaiveMatches 3 2 0 1 2
 
-/-- Whether `gemmBlocked` updates an unshared `C` in place. -/
-def gemmBlockedInPlace (m : Nat) : Bool :=
+/-- Whether `gemmNaive` updates an unshared `C` in place. -/
+def gemmNaiveInPlace (m : Nat) : Bool :=
   let (p, C) := withAddr (mat m m 3)
-  BLASTest.addr (Mat.gemmBlocked 1 (mat m m 1) (mat m m 2) 1 C).data == p
+  BLASTest.addr (Mat.gemmNaive 1 (mat m m 1) (mat m m 2) 1 C).data == p
 
-#guard gemmBlockedInPlace 8
-#guard gemmBlockedInPlace 33
+#guard gemmNaiveInPlace 8
+#guard gemmNaiveInPlace 33
 
 -- A shared `C` is copied, and keeps its elements.
 #guard
   let C := mat 4 4 3
-  let D := Mat.gemmBlocked 1 (mat 4 4 1) (mat 4 4 2) 1 C
+  let D := Mat.gemmNaive 1 (mat 4 4 1) (mat 4 4 2) 1 C
   C.toList == (mat 4 4 3).toList && D.toList == (Mat.gemm 1 (mat 4 4 1) (mat 4 4 2) 1 C).toList
 
 /-! ## Matrices with an offset and a leading dimension -/
@@ -162,14 +162,14 @@ def outside (A : Mat m n) : Nat := A.data.toList.countP (· == 1e9 + 0.5)
 #guard ((matLd 3 4 5 7 1).row 1 (by decide)).toList ==
   (List.range 4).map fun j => (mat 3 4 1).toList[1 + 3 * j]!
 
-/-- Whether `gemm` and `gemmBlocked` on matrices with offsets and leading dimensions compute the
+/-- Whether `gemm` and `gemmNaive` on matrices with offsets and leading dimensions compute the
 same elements as on packed ones, and leave the rest of `C`'s array. -/
 def gemmLdMatches (m n k : Nat) (α β : Float) : Bool :=
   let A := matLd m k 3 (m + 2) 1
   let B := matLd k n 1 (k + 1) 2
   let C := matLd m n 4 (m + 3) 3
   let D := Mat.gemm α A B β C
-  let E := Mat.gemmBlocked α A B β C
+  let E := Mat.gemmNaive α A B β C
   D.toList == gemmModelList α (mat m k 1) (mat k n 2) β (mat m n 3) &&
     E.toList == D.toList && outside D == outside C && outside E == outside C &&
     D.data.size == C.data.size
