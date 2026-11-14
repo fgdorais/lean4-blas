@@ -121,7 +121,8 @@ theorem idx_lt {m off i : USize} {p : Nat} (hw : off.toNat + m.toNat ≤ p) (hi 
 `α * A * B + β * C` for `m × m` matrices, by the loops of the naive `gemm`: for each column `j` of
 `C`, scale it by `β`, then add `α * B[l, j]` times column `l` of `A`.
 -/
-partial def refGemm (m : USize) (α : Float32) (a b : Float32Array) (β : Float32) (c : Float32Array) :
+partial def refGemm (m : USize) (α : Float32) (a b : Float32Array) (β : Float32)
+    (c : Float32Array) :
     Float32Array :=
   if h : a.size = m.toNat * m.toNat ∧ b.size = a.size ∧ c.size = a.size ∧ a.size < USize.size then
     (cols ⟨h.1, h.2.1, h.2.2.1, h.2.2.2⟩ ⟨c, h.2.2.1⟩ 0).1
@@ -208,11 +209,11 @@ def rows (rounds n : Nat) : IO (List Row) := do
   let asum' ← time rounds n fun _ => refSum (·.abs) x
   let nrm2 ← time rounds n fun _ => BLAS.Float32.Vec.nrm2 v
   let nrm2' ← time rounds n fun _ => (refSum (fun a => a * a) x).sqrt
-  let iamax ← time rounds n fun _ => (BLAS.Float32.Vec.iamax v).toFloat32
+  let iamax ← time rounds n fun _ => (BLAS.Float32.Vec.iamax! v).toFloat32
   let iamax' ← time rounds n fun _ => (refIamax x).toFloat32
   -- The worst case for `iamax`: every element is a new maximum.
   let up : BLAS.Float32.Vec n := .ofFn fun i => i.val.toFloat32
-  let iamaxUp ← time rounds n fun _ => (BLAS.Float32.Vec.iamax up).toFloat32
+  let iamaxUp ← time rounds n fun _ => (BLAS.Float32.Vec.iamax! up).toFloat32
   let iamaxUp' ← time rounds n fun _ => (refIamax up.data).toFloat32
   -- Strided vectors: every other element of an array of `2 * n`, against the contiguous ones.
   let x2 := vec (2 * n)
@@ -225,7 +226,8 @@ def rows (rounds n : Nat) : IO (List Row) := do
   let dot2 ← time rounds n fun _ => BLAS.Float32.Vec.dot v2 v2
   return [⟨s!"axpy ×{reps}", axpy, some axpy'⟩,
     ⟨s!"scal ×{reps}", scal, some scal'⟩, ⟨s!"copy ×{reps}", copy, none⟩,
-    ⟨s!"rot ×{reps}", rot, some rot'⟩, ⟨"dot", dot, some dot'⟩, ⟨"asum", asum, some asum'⟩, ⟨"nrm2", nrm2, some nrm2'⟩,
+    ⟨s!"rot ×{reps}", rot, some rot'⟩, ⟨"dot", dot, some dot'⟩, ⟨"asum", asum, some asum'⟩,
+    ⟨"nrm2", nrm2, some nrm2'⟩,
     ⟨"iamax", iamax, some iamax'⟩, ⟨"iamax (increasing)", iamaxUp, some iamaxUp'⟩,
     ⟨s!"axpy ×{reps}, stride 2 / stride 1", axpy2, some axpy⟩,
     ⟨"dot, stride 2 / stride 1", dot2, some dot⟩]
@@ -289,7 +291,8 @@ def level2Rows (rounds m : Nat) : IO (List Row × Nat) := do
       y := BLAS.Float32.Mat.gemv (α q) A x2 0.5 y
     return y.data[0]!
   let T : BLAS.Float32.Mat m m := .ofFn fun i j =>
-    if i.val = j.val then (m + 4 + i.val).toFloat32 else ((i.val * 7 + j.val * 13) % 11).toFloat32 - 5
+    if i.val = j.val then (m + 4 + i.val).toFloat32
+    else ((i.val * 7 + j.val * 13) % 11).toFloat32 - 5
   let tl ← time rounds m fun q => Id.run do
     let mut y := BLAS.Float32.Vec.scal (α q) x
     for _ in [0:reps] do
@@ -316,7 +319,8 @@ def level3Rows (rounds m : Nat) : IO (List Row × Nat) := do
   let C := mat m 3
   let α (q : Nat) := 1.5 + (q - m).toFloat32
   let T : BLAS.Float32.Mat m m := .ofFn fun i j =>
-    if i.val = j.val then (m + 4 + i.val).toFloat32 else ((i.val * 7 + j.val * 13) % 11).toFloat32 - 5
+    if i.val = j.val then (m + 4 + i.val).toFloat32
+    else ((i.val * 7 + j.val * 13) % 11).toFloat32 - 5
   let ts ← time rounds m fun q => (BLAS.Float32.Mat.syrk .lower (α q) A 0.5 C).data[0]!
   let tt ← time rounds m fun q => (BLAS.Float32.Mat.syrkT .lower (α q) A 0.5 C).data[0]!
   let tl ← time rounds m fun q => (BLAS.Float32.Mat.trsm .lower .nonUnit (α q) T C).data[0]!

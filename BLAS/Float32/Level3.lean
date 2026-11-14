@@ -41,8 +41,8 @@ The value of `gemm α A B β C` at `(i, j)`: `betaMul β C[i, j]`, plus the term
 `α * B[l, j] * A[i, l]` for `l = 0, …, k - 1`, added from the left, in the order of the reference
 BLAS.
 -/
-@[expose] public def gemmEntry (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32) (C : PMat m n)
-    (i j : Nat) (hi : i < m) (hj : j < n) : Float32 :=
+@[expose] public def gemmEntry (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32)
+    (C : PMat m n) (i j : Nat) (hi : i < m) (hj : j < n) : Float32 :=
   Nat.fold k (fun l hl s => s + α * B[(l, j)] * A[(i, l)]) (betaMul β C[(i, j)])
 
 /-- The model of `gemm`, with `gemmEntry` at each element. -/
@@ -56,7 +56,8 @@ public def gemmModel (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32)
 adds `α * B[l, j]` times column `l` of `A`, for `l = 0, …, k - 1`. It updates `C` in place when
 `C` is not shared. `Mat.gemmNaive` handles the case `α = 0`, which doesn't run this kernel.
 -/
-public def gemm (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32) (C : PMat m n) : PMat m n :=
+public def gemm (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float32) (C : PMat m n) :
+    PMat m n :=
   if hs : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
       m < USize.size ∧ n < USize.size ∧ k < USize.size then
     let mu := m.toUSize
@@ -126,7 +127,8 @@ private theorem getElem!_gemmCol_of_ne (α a b β) {i j j' : Nat} (hi : i < m) (
 private theorem getElem!_gemmCol (α a b β) {i j : Nat} (hi : i < m) (c : Float32Array)
     (hq : i + m * j < c.size) :
     (gemmCol m k α a b β j c)[i + m * j]! =
-      Nat.fold k (fun l _ s => s + α * b[k * j + l]! * a[m * l + i]!) (betaMul β c[i + m * j]!) := by
+      Nat.fold k (fun l _ s => s + α * b[k * j + l]! * a[m * l + i]!)
+        (betaMul β c[i + m * j]!) := by
   have hw : m * j + 0 ≤ i + m * j ∧ i + m * j < m * j + m := by lia
   have hsub : i + m * j - m * j = i := by lia
   unfold gemmCol
@@ -150,7 +152,8 @@ public theorem gemm_eq (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float3
     have hB := B.size_data
     have hC := C.size_data
     simp only [runInPlaceThenOf_eq, Tail.forIn_eq]
-    rw [Tail.run_forInFrom_unit (F := gemmCol m k α A.data B.data β) (hF := size_gemmCol m k α A.data B.data β)]
+    rw [Tail.run_forInFrom_unit (F := gemmCol m k α A.data B.data β)
+      (hF := size_gemmCol m k α A.data B.data β)]
     · have hcol := size_gemmCol m k α A.data B.data β
       simp only [Tail.run_done]
       apply ext
@@ -177,7 +180,8 @@ public theorem gemm_eq (α : Float32) (A : PMat m k) (B : PMat k n) (β : Float3
         · rw [getElem!_neg c _ hc, getElem!_neg _ _ (by rw [size_gemmCol]; exact hc)]
     · intro j _ hj next a h
       rw [hnu] at hj
-      rw [Tail.run_forInFrom_unit (F := fun i c => c.set! (m * j.toNat + i) (betaMul β c[m * j.toNat + i]!))
+      rw [Tail.run_forInFrom_unit
+          (F := fun i c => c.set! (m * j.toNat + i) (betaMul β c[m * j.toNat + i]!))
           (hF := by simp)]
       · rw [Tail.run_forInFrom_unit (F := fun l c => iterRange (fun i c =>
             c.set! (m * j.toNat + i)

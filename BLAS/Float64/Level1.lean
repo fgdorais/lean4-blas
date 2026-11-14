@@ -369,7 +369,8 @@ The reference BLAS stops adding to `asml` after the first big element. That is o
 `asml` is ignored once `abig > 0`, which holds from the first big element on, so the result is the
 same.
 -/
-@[inline, expose] public def nrm2Step (x : Vec n) (i : Nat) (h : i < n) (s : Float × Float × Float) :
+@[inline, expose] public def nrm2Step (x : Vec n) (i : Nat) (h : i < n)
+    (s : Float × Float × Float) :
     Float × Float × Float :=
   let ax := x[i].abs
   if ax > Blue.tbig then (s.1, s.2.1, s.2.2 + ax * Blue.sbig * (ax * Blue.sbig))
@@ -497,7 +498,8 @@ as the reference BLAS does, since nothing replaces it, so it checks for a `NaN` 
 largest element.
 -/
 public def iamaxLoop (x : Vec n) (o c : USize) (ho : x.off.toUSize = o) (hc : x.inc.toUSize = c)
-    (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float) : Nat :=
+    (hs : x.data.size < USize.size) (m : USize) (hm : m.toNat = n) (i k : USize) (a : Float) :
+    Nat :=
   if hi : i < m then
     let b := (x.uget o c ho hc hs i (hm ▸ hi)).abs
     if i = 0 ∨ ¬b ≤ a then
@@ -578,17 +580,64 @@ private theorem iamaxLoop_eq (x : Vec n) (o c : USize) (ho : x.off.toUSize = o)
 /--
 The index of the first element of largest absolute value, or of the first `NaN`, as in the
 reference BLAS (after LAPACK 3.12.1, which skips a `NaN` unless it is the first element). Unlike
-the reference BLAS, the index starts at `0`, and it is `0` for the empty vector.
+the reference BLAS, the index starts at `0`, and it is `0` for the empty vector. `iamax` and
+`iamax?` return the same index as a `Fin n`.
 -/
-public def iamax (x : Vec n) : Nat :=
-  if hs : x.data.size < USize.size then iamaxLoop x _ _ rfl rfl hs n.toUSize (x.toNat_toUSize hs) 0 0 0
+public def iamax! (x : Vec n) : Nat :=
+  if hs : x.data.size < USize.size then
+    iamaxLoop x _ _ rfl rfl hs n.toUSize (x.toNat_toUSize hs) 0 0 0
   else (Nat.fold n (iamaxStep x) (0, 0)).1
 
-public theorem iamax_eq (x : Vec n) : iamax x = (Nat.fold n (iamaxStep x) (0, 0)).1 := by
-  unfold iamax
+public theorem iamax!_eq (x : Vec n) : iamax! x = (Nat.fold n (iamaxStep x) (0, 0)).1 := by
+  unfold iamax!
   split
   · exact iamaxLoop_eq x _ _ rfl rfl _ _ _ 0 0 0 0 (by simp) (by lia) (.inl rfl) (by simp)
   · rfl
+
+/-- The steps of `iamax` keep an index below the number of steps. -/
+private theorem fst_fold_iamaxStep_lt (x : Vec n) :
+    ∀ N (hN : N ≤ n), 0 < N → (Nat.fold N (fun l hl => iamaxStep x l (by lia)) (0, 0)).1 < N
+  | 0, _, h => absurd h (Nat.lt_irrefl 0)
+  | N + 1, hN, _ => by
+    have ih : N = 0 ∨ (Nat.fold N (fun l hl => iamaxStep x l (by lia)) (0, 0)).1 < N := by
+      rcases Nat.eq_zero_or_pos N with h | h
+      · exact .inl h
+      · exact .inr (fst_fold_iamaxStep_lt x N (by lia) h)
+    rw [Nat.fold_succ]
+    generalize Nat.fold N (fun l hl => iamaxStep x l (by lia)) (0, 0) = b at ih ⊢
+    simp only [iamaxStep]
+    split
+    · simp
+    · rcases ih with rfl | ih
+      · simp_all
+      · lia
+
+/-- `iamax! x` is an index of `x`, unless `x` is empty. -/
+public theorem iamax!_lt (x : Vec n) (h : n ≠ 0) : iamax! x < n := by
+  rw [iamax!_eq]
+  exact fst_fold_iamaxStep_lt x n (Nat.le_refl n) (by lia)
+
+/--
+The index of the first element of largest absolute value, or of the first `NaN`, of a nonempty
+vector, as in the reference BLAS, but starting at `0`. It is `iamax! x`, as a `Fin n`.
+-/
+@[expose] public def iamax (x : Vec n) (h : n ≠ 0 := by grind) : Fin n :=
+  ⟨iamax! x, iamax!_lt x h⟩
+
+@[simp] public theorem val_iamax (x : Vec n) (h : n ≠ 0) : (iamax x h).val = iamax! x := rfl
+
+/--
+The index of the first element of largest absolute value, or of the first `NaN`, as in the
+reference BLAS, but starting at `0`; `none` for the empty vector.
+-/
+@[expose] public def iamax? (x : Vec n) : Option (Fin n) :=
+  if h : n = 0 then none else some (iamax x h)
+
+@[simp] public theorem iamax?_eq_none_iff (x : Vec n) : iamax? x = none ↔ n = 0 := by
+  unfold iamax?; split <;> simp_all
+
+public theorem iamax?_eq_some (x : Vec n) (h : n ≠ 0) : iamax? x = some (iamax x h) := by
+  simp [iamax?, h]
 
 end Vec
 

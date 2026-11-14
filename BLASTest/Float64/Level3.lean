@@ -9,6 +9,10 @@ import BLASTest.Util
 meta import BLAS
 meta import BLASTest.Util
 
+/-!
+Tests for `gemm`, `syrk`, `syrkT`, `trsm` and `trsmRight` on `Float`.
+-/
+
 open BLAS.Float64
 
 /-- An `m × n` matrix of small integers computed from the indices and the seed `s`. -/
@@ -143,7 +147,8 @@ other elements are `1e9 + 0.5`, a value that no test computes.
 def matLd (m n off ld : Nat) (s : Nat := 0) : Mat m n :=
   let a := ScalarArray.Float64Array.ofFn (n := off + ld * n) fun p =>
     let q := p.val - off
-    if off ≤ p.val ∧ q % ld < m then ((q % ld * 7 + q / ld * 13 + s) % 11).toFloat - 5 else 1e9 + 0.5
+    if off ≤ p.val ∧ q % ld < m then ((q % ld * 7 + q / ld * 13 + s) % 11).toFloat - 5
+    else 1e9 + 0.5
   (Mat.ofLd? a off ld).getD (mat m n s)
 
 /-- The number of elements `1e9 + 0.5` in the array of `A`: those outside a matrix of `matLd`. -/
@@ -285,7 +290,8 @@ def syrkMatches (n k : Nat) (uplo : Uplo) (α β : Float) : Bool :=
   let C : Mat 2 2 := .ofFn fun _ _ => nan
   let A : Mat 2 2 := .ofFn fun _ _ => nan
   (Mat.syrk .lower 0 A 0 C)[(1, 0)] == 0 && (Mat.syrkT .upper 0 A 0 C)[(0, 1)] == 0 &&
-    (Mat.syrkT .upper 2 (mat 2 2) 0 C)[(0, 1)] == (2 : Float) * (Mat.syrkT .upper 1 (mat 2 2) 0 C)[(0, 1)]
+    (Mat.syrkT .upper 2 (mat 2 2) 0 C)[(0, 1)] ==
+      (2 : Float) * (Mat.syrkT .upper 1 (mat 2 2) 0 C)[(0, 1)]
 
 /-- Whether `syrk` and `syrkT` update an unshared `C` in place. -/
 def syrkInPlace (n : Nat) : Bool :=

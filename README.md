@@ -6,10 +6,10 @@ Basic Linear Algebra Subprograms written entirely in Lean 4, on the unboxed arra
 [lean4-scalar-arrays](https://github.com/fgdorais/lean4-scalar-arrays), with no C code of its own.
 The routines come with proved specifications; their speed is measured, not promised.
 
-The library is at an early stage. It has, on `Float64` and `Float32`, the BLAS Level 1 routines on
-strided vectors, `gemv`, `ger` and `trsv`, and `gemm`, `syrk` and `trsm` on matrices with an offset
-and a leading dimension. The `Float32` routines are in `BLAS.Float32`, with the same names and specifications as
-those of `BLAS.Float64`, on `Float32Array`.
+It has, on `Float64` and `Float32`, the BLAS Level 1 routines on strided vectors, `gemv`, `ger` and
+`trsv`, and `gemm`, `syrk` and `trsm` on matrices with an offset and a leading dimension. The
+`Float32` routines are in `BLAS.Float32`, with the same names and specifications as those of
+`BLAS.Float64`, on `Float32Array`.
 
 ## Usage
 
@@ -47,17 +47,18 @@ semantics of the reference BLAS (Reference-LAPACK `master`), including its speci
 | `dot x y` | `Σ x[i] * y[i]` | `Nat.fold n (fun i h s => s + x[i] * y[i]) 0` |
 | `asum x` | `Σ \|x[i]\|` | `Nat.fold n (fun i h s => s + x[i].abs) 0` |
 | `nrm2 x` | `√(Σ x[i] * x[i])`, scaled | `nrm2Finish (Nat.fold n (nrm2Step x) (0, 0, 0))` |
-| `iamax x` | index of the first largest `\|x[i]\|`, or first `NaN` | `(Nat.fold n (iamaxStep x) (0, 0)).1` |
+| `iamax! x` | index of the first largest `\|x[i]\|`, or first `NaN` | `(Nat.fold n (iamaxStep x) (0, 0)).1` |
 
 The updates work in place when their output vector's array is not shared, and copy it once
 otherwise. They leave the elements of the array outside the vector unchanged: `data_axpy` and the
 other `data_` lemmas give the whole array as a scalar-arrays `modifyAt` of the old one, at the
-indices `x.stride.idx i` of the vector. The loops are the same
-for every stride, and run as fast at stride `1` as loops over contiguous indices.
+indices `x.stride.idx i` of the vector. The loops are the same for every stride, and run as fast
+at stride `1` as loops over contiguous indices.
 `nrm2` is Blue's algorithm, as in the reference `dnrm2`: it sums the squares of the small, the
 mid-range and the big elements in three accumulators, scaled by powers of `2`, so it overflows or
-underflows only when the norm does. `iamax` counts from `0`, unlike the reference BLAS, and is `0`
-for the empty vector.
+underflows only when the norm does. `iamax!` counts from `0`, unlike the reference BLAS, and is `0`
+for the empty vector. `iamax x h` returns the same index as a `Fin n`, given `h : n ≠ 0`, and
+`iamax? x` as an `Option (Fin n)`, which is `none` for the empty vector.
 
 `rotg a b` and `rotmg d1 d2 x1 y1` construct a rotation and a modified rotation, step for step as
 the reference `drotg` and `drotmg`, and return their results in the structures `Rotg` and `Rotmg`
@@ -109,8 +110,8 @@ is empty (`n = 0`, resp. `m = 0`), only scale `y` when `α = 0`, and set it to `
 it when `β = 0`; `ger` skips the columns with `y[j] = 0`. The `getElem_` lemmas state every case.
 
 `trsv` takes the triangle as a `Uplo` (`.upper` or `.lower`) and the diagonal as a `Diag` (`.unit`
-or `.nonUnit`), and reads nothing else of `A`. Its specification is back substitution, in the order of
-the column-oriented loops: for the lower triangle, `y = trsv .lower d A x` satisfies
+or `.nonUnit`), and reads nothing else of `A`. Its specification is back substitution, in the order
+of the column-oriented loops: for the lower triangle, `y = trsv .lower d A x` satisfies
 
 ```lean
 y[i] = d.apply (Nat.fold i (fun l _ s => s - y[l] * A[(i, l)]) x[i]) A[(i, i)]
@@ -135,8 +136,7 @@ leaves `C` unchanged when `k = 0` and `β = 1`. As in the reference `dtrsm`, `tr
 set `B` to `0` without reading `A` or `B` when `α = 0`, scale `B` by `α` before solving, divide by
 the diagonal, and never skip a zero of `B`. `trsm` solves each column of `B` by the loops of
 `trsv`, four columns at a time, so its specification is that of `trsv` on the scaled column;
-`trsmRight` is back
-substitution along the rows, from the columns already solved.
+`trsmRight` is back substitution along the rows, from the columns already solved.
 
 ## Conformance
 
@@ -144,7 +144,7 @@ The target is the behavior of the reference BLAS, as in the current `master` bra
 [Reference-LAPACK](https://github.com/Reference-LAPACK/lapack), rather than its last release. Each
 routine computes every element with the operations of the reference implementation, in the same
 order, so that the result is exact to the bit, and its specification says so. Where a routine still
-differs from the reference BLAS, such as `iamax` counting from `0`, its documentation says how.
+differs from the reference BLAS, such as `iamax!` counting from `0`, its documentation says how.
 
 ## Performance
 
@@ -180,11 +180,24 @@ Level 2 and `gemm`, but the binaries then only run on CPUs like the one that bui
 
 ## Installation
 
-The library depends only on lean4-scalar-arrays, pinned to an exact version. The `main` branch
+The library depends only on lean4-scalar-arrays, pinned to an exact release. The `main` branch
 follows the newest Lean release, including release candidates, and the `nightly-testing` branch
-follows the newest Lean nightly.
+follows the newest Lean nightly. Releases are tagged `vX.Y.Z`. Add one to your `lakefile.toml`, or
+`main` for the latest changes:
+
+```toml
+[[require]]
+name = "lean4-blas"
+git = "https://github.com/fgdorais/lean4-blas"
+rev = "main"
+```
+
+and `import BLAS`. CI builds and tests the library on Linux (x86_64 and arm64), macOS (arm64) and
+Windows (x86_64).
 
 ## Development
+
+[CONTRIBUTING.md](CONTRIBUTING.md) collects the conventions of the code.
 
 ```bash
 lake build
@@ -201,8 +214,7 @@ its Lean model.
 
 `lake exe bench [--tsv] [--float32] [size] [rounds]` times the `Float64` routines, or the
 `Float32` ones with `--float32`, and compares each with a hand-written `USize` loop where there is
-one. `lake build` compiles it so that it keeps up with the API,
-but CI doesn't run it. To run it on GitHub, add the `benchmark` label to a pull request, which
+one. `lake build` compiles it so that it keeps up with the API, but CI doesn't run it. To run it on GitHub, add the `benchmark` label to a pull request, which
 compares the pull request with its base, or start the Benchmarks workflow from the Actions tab.
 
 The `Float32` sources, tests and benchmarks, in `BLAS/Float32/`, `BLASTest/Float32/` and

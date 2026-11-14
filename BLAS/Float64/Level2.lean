@@ -258,7 +258,8 @@ quarter of the reads and writes of `y`. As in the reference BLAS, it returns `y`
 or `x`. It updates `y` in place when its array is not shared, and leaves the elements of the array
 outside `y` unchanged.
 -/
-@[expose] public def gemv (α : Float) (A : Mat m n) (x : Vec n) (β : Float) (y : Vec m) : Vec m :=
+@[expose] public def gemv (α : Float) (A : Mat m n) (x : Vec n) (β : Float) (y : Vec m) :
+    Vec m :=
   if n = 0 then y
   else if α == 0 then
     { data := y.scalBetaData β
@@ -301,8 +302,8 @@ Element `i` of `gemv α A x β y` is `y[i]` when `n = 0`, `betaMul β y[i]` when
 otherwise `betaMul β y[i]`, plus the terms `α * x[j] * A[i, j]` for `j = 0, …, n - 1`, added from
 the left.
 -/
-@[simp] public theorem getElem_gemv (α : Float) (A : Mat m n) (x : Vec n) (β : Float) (y : Vec m)
-    (i : Nat) (h : i < m) :
+@[simp] public theorem getElem_gemv (α : Float) (A : Mat m n) (x : Vec n) (β : Float)
+    (y : Vec m) (i : Nat) (h : i < m) :
     (gemv α A x β y)[i] =
       if n = 0 then y[i] else if α == 0 then betaMul β y[i]
       else Nat.fold n (fun j _ s => s + α * x[j] * A[(i, j)]) (betaMul β y[i]) := by
@@ -613,7 +614,8 @@ The number of rows that the loop of `ger` updates in a column: `0` when `y[j] = 
 inlined, so that the column loop has a single call site, which the C compiler inlines and
 vectorizes.
 -/
-@[noinline, expose] public def gerRows (mu : USize) (yj : Float) : USize := if yj == 0 then 0 else mu
+@[noinline, expose] public def gerRows (mu : USize) (yj : Float) : USize :=
+  if yj == 0 then 0 else mu
 
 public theorem gerRows_le {mu : USize} (hmu : mu.toNat = m) (yj : Float) :
     (gerRows mu yj).toNat ≤ m := by

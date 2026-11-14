@@ -17,3 +17,9 @@ public import BLAS.Float64.Level3
 public import BLAS.Float64.GemmBlocked
 public import BLAS.Float64.Gemm
 public import BLAS.Float64.Trsm
+
+/-!
+# BLAS on `Float`
+
+The routines on vectors and matrices of `Float`, stored in `Float64Array`s.
+-/

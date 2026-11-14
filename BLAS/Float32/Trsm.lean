@@ -237,7 +237,8 @@ leaves the others.
 -/
 theorem stepRows4_mapMat (d : Diag) (A : Mat m m) (s : Float32Array) (off ld : Nat) (hml : m ≤ ld)
     (c : Nat) (hq : off + ld * (c + 3) + m ≤ s.size) {j base cnt : Nat} (hj : j < m)
-    (hb : base + cnt ≤ m) (hjb : ¬(base ≤ j ∧ j < base + cnt)) (L L' : Nat → Nat → Float32 → Float32)
+    (hb : base + cnt ≤ m) (hjb : ¬(base ≤ j ∧ j < base + cnt))
+    (L L' : Nat → Nat → Float32 → Float32)
     (hdiag : ∀ c', c ≤ c' → c' < c + 4 → ∀ v,
       d.apply (L j c' s[off + ld * c' + j]!) A.data[A.off + A.ld * j + j]! = L' j c' v)
     (hrow : ∀ c', c ≤ c' → c' < c + 4 → ∀ i, base ≤ i → i < base + cnt → ∀ v,
@@ -934,7 +935,8 @@ public def trsmData (uplo : Uplo) (d : Diag) (α : Float32) (A : Mat m m) (B : M
   else trsmLoop uplo d α A B.off B.ld B.data.size B.le_ld B.bound 0 B.data rfl
 
 public theorem trsmData_eq (uplo : Uplo) (d : Diag) (α : Float32) (A : Mat m m) (B : Mat m n) :
-    trsmData uplo d α A B = mapMat B.data B.off B.ld m 0 n fun i j _ => trsmAt uplo d α A B i j := by
+    trsmData uplo d α A B =
+      mapMat B.data B.off B.ld m 0 n fun i j _ => trsmAt uplo d α A B i j := by
   unfold trsmData
   cases hα : α == 0
   · simp only [Bool.false_eq_true, ↓reduceIte]
@@ -1040,7 +1042,8 @@ Element `(i, j)` of the solution of `X * A = α * B` for the upper triangle of `
 `α * B[i, j]`, minus the terms `A[k, j] * X[i, k]` for `k = 0, …, j - 1`, divided by `A[j, j]`
 unless the diagonal is unit.
 -/
-public def trsmRightUpper (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m n) (i j : Nat) : Float32 :=
+public def trsmRightUpper (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m n) (i j : Nat) :
+    Float32 :=
   d.apply (Nat.fold j (fun k _hk s =>
       s - A.data[A.off + A.ld * j + k]! * trsmRightUpper d α A B i k)
     (α * B.data[B.off + B.ld * j + i]!)) A.data[A.off + A.ld * j + j]!
@@ -1052,7 +1055,8 @@ Element `(i, j)` of the solution of `X * A = α * B` for the lower triangle of `
 `α * B[i, j]`, minus the terms `A[k, j] * X[i, k]` for `k = j + 1, …, n - 1`, divided by `A[j, j]`
 unless the diagonal is unit.
 -/
-public def trsmRightLower (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m n) (i j : Nat) : Float32 :=
+public def trsmRightLower (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m n) (i j : Nat) :
+    Float32 :=
   d.apply (Nat.fold (n - 1 - j) (fun t _ s =>
       s - A.data[A.off + A.ld * j + (j + 1 + t)]! * trsmRightLower d α A B i (j + 1 + t))
     (α * B.data[B.off + B.ld * j + i]!)) A.data[A.off + A.ld * j + j]!
@@ -1062,7 +1066,8 @@ decreasing_by lia
 /-- Dividing the rows `0 ≤ i < d.rows m` by `t` is `Diag.apply` on all of them. -/
 private theorem modifyAt_rows (b : Float32Array) (idx : Nat → Nat) (d : Diag) {mu : USize}
     (hmu : mu.toNat = m) (t : Float32) :
-    b.modifyAt idx 0 (d.rows mu).toNat (fun _ v => v / t) = b.modifyAt idx 0 m fun _ v => d.apply v t := by
+    b.modifyAt idx 0 (d.rows mu).toNat (fun _ v => v / t) =
+      b.modifyAt idx 0 m fun _ v => d.apply v t := by
   cases d
   · simp only [Diag.rows, USize.toNat_zero, modifyAt_self, Diag.apply]
     rw [modifyAt_id]
@@ -1127,13 +1132,16 @@ public def trsmRightUpperData (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m
           b[cj + 1 * i] := b[cj + 1 * i] / ajj).2
   else mapMat B.data B.off B.ld m 0 n fun i j _ => trsmRightUpper d α A B i j
 
-/-- The value of column `j` of `trsmRight .upper` from its old value `v`, with the columns before it. -/
+/--
+The value of column `j` of `trsmRight .upper` from its old value `v`, with the columns before it.
+-/
 private def trsmRightUpperG (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m n) (i j : Nat)
     (v : Float32) : Float32 :=
   d.apply (Nat.fold j (fun k _ s => s - A.data[A.off + A.ld * j + k]! * trsmRightUpper d α A B i k)
     (α * v)) A.data[A.off + A.ld * j + j]!
 
-private theorem trsmRightUpper_eq_G (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m n) (i j : Nat) :
+private theorem trsmRightUpper_eq_G (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m n)
+    (i j : Nat) :
     trsmRightUpper d α A B i j = trsmRightUpperG d α A B i j B.data[B.off + B.ld * j + i]! := by
   rw [trsmRightUpper]; rfl
 
@@ -1224,7 +1232,8 @@ public theorem trsmRightUpperData_eq (d : Diag) (α : Float32) (A : Mat n n) (B 
               (hF := by simp)]
           · apply run_congr
             rw [USize.toNat_zero, hmu,
-              iterRange_set!_read _ _ _ (fun i v w => v - A.data[A.off + A.ld * j.toNat + k.toNat]! * w)
+              iterRange_set!_read _ _ _
+                (fun i v w => v - A.data[A.off + A.ld * j.toNat + k.toNat]! * w)
                 (fun i _ hi i' _ hi' e => by
                   simp only [Stride.idx, Nat.one_mul] at e
                   exact hcol k.toNat (by lia) i hi i' hi' e)]
@@ -1284,14 +1293,17 @@ public def trsmRightLowerData (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m
           b[cj + 1 * i] := b[cj + 1 * i] / ajj).2
   else mapMat B.data B.off B.ld m 0 n fun i j _ => trsmRightLower d α A B i j
 
-/-- The value of column `j` of `trsmRight .lower` from its old value `v`, with the columns after it. -/
+/--
+The value of column `j` of `trsmRight .lower` from its old value `v`, with the columns after it.
+-/
 private def trsmRightLowerG (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m n) (i j : Nat)
     (v : Float32) : Float32 :=
   d.apply (Nat.fold (n - 1 - j) (fun t _ s =>
       s - A.data[A.off + A.ld * j + (j + 1 + t)]! * trsmRightLower d α A B i (j + 1 + t))
     (α * v)) A.data[A.off + A.ld * j + j]!
 
-private theorem trsmRightLower_eq_G (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m n) (i j : Nat) :
+private theorem trsmRightLower_eq_G (d : Diag) (α : Float32) (A : Mat n n) (B : Mat m n)
+    (i j : Nat) :
     trsmRightLower d α A B i j = trsmRightLowerG d α A B i j B.data[B.off + B.ld * j + i]! := by
   rw [trsmRightLower]; rfl
 
@@ -1412,7 +1424,8 @@ public theorem trsmRightLowerData_eq (d : Diag) (α : Float32) (A : Mat n n) (B 
             apply run_set_eq_set!
             · rw [B.toNat_col_index hs.2.1 hi (by rw [hj]; exact hjn), hj]
               rfl
-            · have h1 := B.toNat_col_index hs.2.1 hi (j := n.toUSize - 1 - t) (by rw [hj]; exact hjn)
+            · have h1 :=
+                B.toNat_col_index hs.2.1 hi (j := n.toUSize - 1 - t) (by rw [hj]; exact hjn)
               have h2 := B.toNat_col_index hs.2.1 hi hkn
               simp only [Mat.uget_eq_getElem, getElem_def, h1, h2, hj, Stride.idx, Nat.one_mul]
               rw [getElem!_pos a'' _ (by rw [h'']; exact B.index_lt hi hjn),

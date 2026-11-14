@@ -39,7 +39,8 @@ public def main (args : List String) : IO Unit := do
       IO.println s!"{r.name}\t{fmt r.time}"
   else
     IO.println
-      s!"{if single then "Float32" else "Float64"}, {n} elements, fastest of {rounds} runs, in milliseconds.\n"
+      s!"{if single then "Float32" else "Float64"}, {n} elements, fastest of {rounds} runs, \
+        in milliseconds.\n"
     IO.println "| Benchmark | BLAS | Reference | Ratio |"
     IO.println "|---|--:|--:|--:|"
     for r in rows do
@@ -55,7 +56,8 @@ public def main (args : List String) : IO Unit := do
       match rs with
       | [v, t, r, v2, tl, tu] =>
         IO.println
-          s!"| {m} | {g v.time} | {g t.time} | {g r.time} | {g v2.time} | {g (2 * tl.time)} | {g (2 * tu.time)} |"
+          s!"| {m} | {g v.time} | {g t.time} | {g r.time} | {g v2.time} | {g (2 * tl.time)} \
+            | {g (2 * tu.time)} |"
       | _ => pure ()
     IO.println "\n`gemm` of square matrices, in GFLOP/s.\n"
     IO.println "| Size | gemmNaive | gemm | gemm, ld = m + 8 | Reference |"

@@ -274,8 +274,9 @@ public theorem modifyAt_shift (a : Float32Array) (s : Stride) (k h : Nat)
       Stride.idx_shift, Nat.add_sub_cancel_left]
 
 /-- The steps of a stride that fits are at distinct indices. -/
-public theorem _root_.ScalarArray.Stride.Fits.injOn {s : Stride} {N size : Nat} (hs : s.Fits N size) {lo hi : Nat}
-    (hn : hi ≤ N) : ∀ i, lo ≤ i → i < hi → ∀ j, lo ≤ j → j < hi → s.idx i = s.idx j → i = j :=
+public theorem _root_.ScalarArray.Stride.Fits.injOn {s : Stride} {N size : Nat} (hs : s.Fits N size)
+    {lo hi : Nat} (hn : hi ≤ N) :
+    ∀ i, lo ≤ i → i < hi → ∀ j, lo ≤ j → j < hi → s.idx i = s.idx j → i = j :=
   fun _ _ h₁ _ _ h₂ e => hs.idx_inj (by lia) (by lia) e
 
 /--
@@ -285,7 +286,8 @@ is mapped by `g i` and then `g' i`.
 public theorem modifyAt_modifyAt (a : Float32Array) (idx : Nat → Nat) {lo hi : Nat}
     (hinj : ∀ i, lo ≤ i → i < hi → ∀ j, lo ≤ j → j < hi → idx i = idx j → i = j)
     (g g' : Nat → Float32 → Float32) :
-    (a.modifyAt idx lo hi g).modifyAt idx lo hi g' = a.modifyAt idx lo hi fun i v => g' i (g i v) := by
+    (a.modifyAt idx lo hi g).modifyAt idx lo hi g' =
+      a.modifyAt idx lo hi fun i v => g' i (g i v) := by
   apply ext_getElem (by simp)
   intro p hp _
   by_cases hc : ∃ i, lo ≤ i ∧ i < hi ∧ idx i = p
@@ -350,7 +352,8 @@ public theorem set_modifyAt_pred (a : Float32Array) {s : Stride} {N : Nat}
 /-- Element `l < m` of a column window `o + l`, after a `modifyAt` of the window by `g`. -/
 public theorem getElem!_modifyAt_col (b : Float32Array) (o m : Nat) (g : Nat → Float32 → Float32)
     {l : Nat} (hl : l < m) :
-    (b.modifyAt (Stride.mk o 1).idx 0 m g)[o + l]! = if o + l < b.size then g l b[o + l]! else default := by
+    (b.modifyAt (Stride.mk o 1).idx 0 m g)[o + l]! =
+      if o + l < b.size then g l b[o + l]! else default := by
   have e : (Stride.mk o 1).idx l = o + l := by simp [Stride.idx]
   split
   · rename_i h
