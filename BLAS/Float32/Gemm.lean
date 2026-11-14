@@ -10,12 +10,13 @@ public import BLAS.Float32.GemmBlocked
 /-!
 # `gemm` on matrices
 
-`Mat.gemm` and `Mat.gemmBlocked` run the kernels of `PMat.gemm` and `PMat.gemmBlocked` on packed
-matrices. A matrix that is packed already, from the index `0` with `ld = m` in an array of `m * n`,
-goes to the kernel with no copy, and `C` is updated in place. Otherwise the matrix is packed into a
-copy first, and the columns of the result are copied back into the array of `C`, which leaves the
-other elements of that array unchanged. The copies take `m * k + k * n + 2 * m * n` steps against
-the `2 * m * n * k` floating-point operations of the product.
+`Mat.gemm` runs the kernel of `PMat.gemmBlocked`, and `Mat.gemmNaive` the kernel of `PMat.gemm`,
+which has the naive loops of the reference BLAS, on packed matrices. A matrix that is packed
+already, from the index `0` with `ld = m` in an array of `m * n`, goes to the kernel with no copy,
+and `C` is updated in place. Otherwise the matrix is packed into a copy first, and the columns of
+the result are copied back into the array of `C`, which leaves the other elements of that array
+unchanged. The copies take `m * k + k * n + 2 * m * n` steps against the `2 * m * n * k`
+floating-point operations of the product.
 -/
 
 open ScalarArray Float32Array InPlace
@@ -138,13 +139,14 @@ public theorem gemmBy_eq (α β : Float32) (f : PMat m k → PMat k n → PMat m
   · exact key _ (fun i j h => getElem_pack C i j h)
 
 /--
-`gemm α A B β C` is `α * A * B + β * C`, by the naive loops of the reference BLAS, over `C`. It
+`gemmNaive α A B β C` is `α * A * B + β * C`, by the naive loops of the reference BLAS, over `C`,
+and `gemm` computes the same matrix faster. It
 updates `C` in place when `C` is packed and its array is not shared. It leaves the elements of
 `C`'s array outside `C` unchanged. As in the reference BLAS, it sets `C` to `0` without reading it
 when `β = 0`, before adding the products, and only scales `C` when `α = 0`, without reading `A` or
 `B`.
 -/
-@[expose] public def gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32) (C : Mat m n) :
+@[expose] public def gemmNaive (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32) (C : Mat m n) :
     Mat m n :=
   if α == 0 then
     { data := C.scalBetaData β
@@ -176,32 +178,36 @@ theorem gemmData_eq (α β : Float32) (f : PMat m k → PMat k n → PMat m n �
     exact mapMat_congr_getElem _ _ _ _ _ _ fun i j hi _ hj _ => by
       simp [gemmAt, gemmEntry, hi, hj, hα, getElem_def]
 
-/-- The array of `gemm α A B β C` is the array of `C` with its elements updated. -/
-public theorem data_gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32) (C : Mat m n) :
-    (gemm α A B β C).data = mapMat C.data C.off C.ld m 0 n (gemmAt α A B β C) := by
+/-- The array of `gemmNaive α A B β C` is the array of `C` with its elements updated. -/
+public theorem data_gemmNaive (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32) (C : Mat m n) :
+    (gemmNaive α A B β C).data = mapMat C.data C.off C.ld m 0 n (gemmAt α A B β C) := by
   rw [← gemmData_eq α β _ (fun P Q R i j h => PMat.getElem_gemm α P Q β R i j h) A B C]
-  unfold gemm; split <;> simp_all
+  unfold gemmNaive; split <;> simp_all
 
-@[simp] public theorem off_gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
-    (C : Mat m n) : (gemm α A B β C).off = C.off := by
-  unfold gemm; split <;> rfl
+@[simp] public theorem off_gemmNaive (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
+    (C : Mat m n) : (gemmNaive α A B β C).off = C.off := by
+  unfold gemmNaive; split <;> rfl
 
-@[simp] public theorem ld_gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
-    (C : Mat m n) : (gemm α A B β C).ld = C.ld := by
-  unfold gemm; split <;> rfl
+@[simp] public theorem ld_gemmNaive (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
+    (C : Mat m n) : (gemmNaive α A B β C).ld = C.ld := by
+  unfold gemmNaive; split <;> rfl
 
-@[simp] public theorem getElem_gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
+@[simp] public theorem getElem_gemmNaive (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
     (C : Mat m n) (i j : Nat) (h : i < m ∧ j < n) :
-    (gemm α A B β C)[(i, j)] = gemmEntry α A B β C i j h.1 h.2 := by
-  rw [getElem_of_data_eq_mapMat _ (data_gemm α A B β C) (off_gemm α A B β C) (ld_gemm α A B β C)
-    i j h]
+    (gemmNaive α A B β C)[(i, j)] = gemmEntry α A B β C i j h.1 h.2 := by
+  rw [getElem_of_data_eq_mapMat _ (data_gemmNaive α A B β C) (off_gemmNaive α A B β C)
+    (ld_gemmNaive α A B β C) i j h]
   simp [gemmAt, h.1, h.2]
 
 /--
-`gemmBlocked α A B β C` is `gemm α A B β C`, about twice as fast, by the blocked loops of
-`PMat.gemmBlocked`.
+`gemm α A B β C` is `α * A * B + β * C`, over `C`, by the blocked loops of `PMat.gemmBlocked`. Each
+element gets the operations of the naive loops of the reference BLAS, in the same order, so the
+result is that of `gemmNaive` to the bit, about twice as fast. It updates `C` in place when `C` is
+packed and its array is not shared. It leaves the elements of `C`'s array outside `C` unchanged. As
+in the reference BLAS, it sets `C` to `0` without reading it when `β = 0`, before adding the
+products, and only scales `C` when `α = 0`, without reading `A` or `B`.
 -/
-@[expose] public def gemmBlocked (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
+@[expose] public def gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
     (C : Mat m n) : Mat m n :=
   if α == 0 then
     { data := C.scalBetaData β
@@ -215,27 +221,34 @@ public theorem data_gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float3
       ld := C.ld
       le_ld := C.le_ld
       bound := by
-        rw [gemmBy_eq α β _ (fun P Q R i j h => PMat.getElem_gemmBlocked α P Q β R i j h), size_mapMat]
+        rw [gemmBy_eq α β _ (fun P Q R i j h => PMat.getElem_gemmBlocked α P Q β R i j h),
+          size_mapMat]
         exact C.bound }
 
-/-- The array of `gemmBlocked α A B β C` is the array of `C` with its elements updated. -/
-public theorem data_gemmBlocked (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
+/-- The array of `gemm α A B β C` is the array of `C` with its elements updated. -/
+public theorem data_gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
     (C : Mat m n) :
-    (gemmBlocked α A B β C).data = mapMat C.data C.off C.ld m 0 n (gemmAt α A B β C) := by
+    (gemm α A B β C).data = mapMat C.data C.off C.ld m 0 n (gemmAt α A B β C) := by
   rw [← gemmData_eq α β _ (fun P Q R i j h => PMat.getElem_gemmBlocked α P Q β R i j h) A B C]
-  unfold gemmBlocked; split <;> simp_all
+  unfold gemm; split <;> simp_all
 
-/-- `gemmBlocked` computes the same matrix as `gemm`, to the bit. -/
-public theorem gemmBlocked_eq_gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
-    (C : Mat m n) : gemmBlocked α A B β C = gemm α A B β C := by
-  refine ext_data ?_ ?_ ?_
-  · rw [data_gemmBlocked, data_gemm]
-  all_goals unfold gemmBlocked; split <;> simp
+@[simp] public theorem off_gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
+    (C : Mat m n) : (gemm α A B β C).off = C.off := by
+  unfold gemm; split <;> rfl
 
-@[simp] public theorem getElem_gemmBlocked (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
+@[simp] public theorem ld_gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
+    (C : Mat m n) : (gemm α A B β C).ld = C.ld := by
+  unfold gemm; split <;> rfl
+
+/-- `gemm` computes the same matrix as `gemmNaive`, to the bit. -/
+public theorem gemm_eq_gemmNaive (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
+    (C : Mat m n) : gemm α A B β C = gemmNaive α A B β C :=
+  ext_data (by rw [data_gemm, data_gemmNaive]) (by simp) (by simp)
+
+@[simp] public theorem getElem_gemm (α : Float32) (A : Mat m k) (B : Mat k n) (β : Float32)
     (C : Mat m n) (i j : Nat) (h : i < m ∧ j < n) :
-    (gemmBlocked α A B β C)[(i, j)] = gemmEntry α A B β C i j h.1 h.2 := by
-  rw [gemmBlocked_eq_gemm, getElem_gemm]
+    (gemm α A B β C)[(i, j)] = gemmEntry α A B β C i j h.1 h.2 := by
+  rw [gemm_eq_gemmNaive, getElem_gemmNaive]
 
 end Mat
 
