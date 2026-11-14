@@ -5,6 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import BLAS.Float32.Trsv
+public import BLAS.Float32.Level2
 import all BLAS.Internal
 
 /-!
@@ -387,42 +388,85 @@ and its old value `v`: `α * t` when `β = 0`, without reading `v`, and `α * t 
     (v : Float32) : Float32 :=
   if uplo.contains i j then syrkTVal α β (syrkTSum A i j) v else v
 
-/-- `syrkTSum A i j` on `USize` indices, as a loop. -/
-@[inline] public def syrkTDot (A : Mat k n) (ao al : USize) (ha : A.off.toUSize = ao)
-    (hl : A.ld.toUSize = al) (hs : A.data.size < USize.size) (i j : USize) (hi : i.toNat < n)
-    (hj : j.toNat < n) : Float32 :=
-  foldUpTo k (fun l _ s => s + A.data[A.off + A.ld * i.toNat + l]! *
-      A.data[A.off + A.ld * j.toNat + l]!)
-    (fun l hl' s => s + A.uget ao al ha hl hs l i hl' hi * A.uget ao al ha hl hs l j hl' hj) 0
+/-- The columns `lo` to `lo + w - 1` of `A`, as a matrix, with no copy. -/
+def colsOf (A : Mat k n) (lo w : Nat) (h : lo + w ≤ n) : Mat k w where
+  data := A.data
+  off := A.off + A.ld * lo
+  ld := A.ld
+  le_ld := A.le_ld
+  bound := by
+    rcases A.bound with h' | h' | h'
+    · exact Or.inl h'
+    · exact Or.inr (Or.inl (by lia))
+    · rcases Nat.eq_zero_or_pos w with hw | hw
+      · exact Or.inr (Or.inl hw)
+      · have := Nat.mul_le_mul_left A.ld (show lo + (w - 1) ≤ n - 1 by lia)
+        rw [Nat.mul_add] at this
+        exact Or.inr (Or.inr (by lia))
 
-public theorem syrkTDot_eq (A : Mat k n) (ao al : USize) (ha : A.off.toUSize = ao)
-    (hl : A.ld.toUSize = al) (hs : A.data.size < USize.size) (i j : USize) (hi : i.toNat < n)
-    (hj : j.toNat < n) : syrkTDot A ao al ha hl hs i j hi hj = syrkTSum A i.toNat j.toNat := by
-  unfold syrkTDot syrkTSum
-  rw [foldUpTo_eq]
-  intro l hl' s
-  rw [Mat.uget_eq_getElem, Mat.uget_eq_getElem, getElem_def, getElem_def,
-    getElem!_pos A.data _ (A.index_lt hl' hi), getElem!_pos A.data _ (A.index_lt hl' hj)]
+/-- Column `j` of `A`, as a vector, with no copy. -/
+def colVec (A : Mat k n) (j : Nat) (hj : j < n) : Vec k where
+  data := A.data
+  off := A.off + A.ld * j
+  inc := 1
+  inc_pos := Or.inl Nat.one_pos
+  bound := by
+    rcases Nat.eq_zero_or_pos k with h | h
+    · exact Or.inl h
+    · exact Or.inr (by have := A.col_le h hj; lia)
+
+/-- The sums of `colsOf` with `colVec` are those of `syrkT`. -/
+private theorem gemvTSum_colsOf (A : Mat k n) (lo w : Nat) (h : lo + w ≤ n) (j : Nat)
+    (hj : j < n) (q : Nat) :
+    gemvTSum (colsOf A lo w h) (colVec A j hj) q = syrkTSum A (lo + q) j := by
+  simp only [gemvTSum, syrkTSum, colsOf, colVec, Nat.one_mul, Nat.mul_add, Nat.add_assoc]
+
+/--
+The sums `syrkTSum A i j` for the rows `i` of column `j` in the triangle `uplo`, from the first:
+the sums of column `j` of `A` with the columns of `A` in the triangle, four at a time, by the loops
+of `gemvT`.
+-/
+def syrkTSums (uplo : Uplo) (A : Mat k n) (hs : A.data.size < USize.size) (hk : k < USize.size)
+    (hn : n < USize.size) (j : Nat) (hj : j < n) : Float32Array :=
+  let lo := uplo.lo j
+  let w := uplo.hi n j - lo
+  have hw : lo + w ≤ n := by have := uplo.lo_le_hi hj; have := uplo.hi_le hj; lia
+  gemvTSums (colsOf A lo w hw) (colVec A j hj) _ _ _ _ rfl rfl rfl rfl ⟨hs, hs⟩ (by lia)
+    k.toUSize (by grind) w.toUSize (by grind) 0 (by simp) (Float32Array.emptyWithCapacity w)
+
+theorem syrkTSums_spec (uplo : Uplo) (A : Mat k n) (hs : A.data.size < USize.size)
+    (hk : k < USize.size) (hn : n < USize.size) (j : Nat) (hj : j < n) :
+    (syrkTSums uplo A hs hk hn j hj).size = uplo.hi n j - uplo.lo j ∧
+      ∀ q (h : q < (syrkTSums uplo A hs hk hn j hj).size),
+        (syrkTSums uplo A hs hk hn j hj)[q] = syrkTSum A (uplo.lo j + q) j := by
+  have hw : uplo.lo j + (uplo.hi n j - uplo.lo j) ≤ n := by
+    have := uplo.lo_le_hi hj; have := uplo.hi_le hj; lia
+  have := gemvTSums_spec (colsOf A (uplo.lo j) _ hw) (colVec A j hj) _ _ _ _ rfl rfl rfl rfl
+    ⟨hs, hs⟩ (by lia) k.toUSize (by grind) (uplo.hi n j - uplo.lo j).toUSize (by grind) 0
+    (by simp) (Float32Array.emptyWithCapacity (uplo.hi n j - uplo.lo j)) (by simp) (by simp)
+  refine ⟨this.1, fun q h => ?_⟩
+  rw [← gemvTSum_colsOf A _ _ hw j hj]
+  exact this.2 q h
 
 /-- The array of `syrkT`, for `α ≠ 0`. -/
 public def syrkTData (uplo : Uplo) (α : Float32) (A : Mat k n) (β : Float32) (C : Mat n n) :
     Float32Array :=
-  if hs : A.data.size < USize.size ∧ C.data.size < USize.size ∧ n < USize.size then
+  if hs : A.data.size < USize.size ∧ C.data.size < USize.size ∧ n < USize.size ∧
+      k < USize.size then
     let nu := n.toUSize
     have hnu : nu.toNat = n := by grind
     let c := C.data
-    let ao := A.off.toUSize
-    let al := A.ld.toUSize
     let co := C.off.toUSize
     let cl := C.ld.toUSize
     (inplace c do
       for j in 0...nu do
         let cj := co + cl * j
-        for i in uplo.loU j...uplo.hiU nu j do
+        let lo := uplo.loU j
+        let sums := syrkTSums uplo A hs.1 hs.2.2.2 hs.2.2.1 j.toNat (by lia)
+        for i in lo...uplo.hiU nu j do
           have hi : i.toNat < n := lt_of_hiU (u := uplo) (j := j) hnu (by lia) (by lia)
           have hk : (cj + 1 * i).toNat < c.size := C.toNat_col_index_lt hs.2.1 hi (by lia)
-          c[cj + 1 * i] :=
-            syrkTVal α β (syrkTDot A ao al rfl rfl hs.1 i j hi (by lia)) c[cj + 1 * i]).2
+          c[cj + 1 * i] := syrkTVal α β sums[(i - lo).toNat]! c[cj + 1 * i]).2
   else mapMat C.data C.off C.ld n 0 n (syrkTAt uplo α A β)
 
 public theorem syrkTData_eq (uplo : Uplo) (α : Float32) (A : Mat k n) (β : Float32) (C : Mat n n) :
@@ -453,8 +497,13 @@ public theorem syrkTData_eq (uplo : Uplo) (α : Float32) (A : Mat k n) (β : Flo
         by_cases hc : uplo.contains i j.toNat = true
         · rw [ite_eq_left ((uplo.contains_iff hi).1 hc), ite_eq_left hc]
         · rw [ite_eq_right (fun h' => hc ((uplo.contains_iff hi).2 h')), ite_eq_right hc]
-      · intro i _ _ v
-        rw [syrkTDot_eq]
+      · intro i hlo hhi v
+        have hle : (uplo.loU j).toNat ≤ i.toNat := hlo
+        have hsp := syrkTSums_spec uplo A hs.1 hs.2.2.2 hs.2.2.1 _ hj
+        have hq : i.toNat - uplo.lo j.toNat < (syrkTSums uplo A hs.1 hs.2.2.2 hs.2.2.1 _ hj).size := by
+          rw [hsp.1, ← uplo.toNat_loU, ← uplo.toNat_hiU hnu hj]; lia
+        rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.mpr hle), uplo.toNat_loU,
+          getElem!_pos (syrkTSums uplo A hs.1 hs.2.2.2 hs.2.2.1 _ hj) _ hq, hsp.2, Nat.add_sub_cancel' (by rw [← uplo.toNat_loU]; exact hle)]
   · rfl
 
 /--
@@ -471,7 +520,9 @@ the reference BLAS: `betaMul β v` when `α = 0`, and `v` when `k = 0` and `β =
 `syrkT uplo α A β C` is `α * Aᵀ * A + β * C`, on the triangle `uplo` of `C`, by the loops of the
 reference BLAS: for each element `(i, j)` of the triangle, it sums the products `A[l, i] * A[l, j]`
 for `l = 0, …, k - 1` from the left, into `t`, then writes `α * t + β * C[i, j]`, or `α * t`
-without reading `C[i, j]` when `β = 0`. As in the reference BLAS, it only scales `C` when `α = 0`,
+without reading `C[i, j]` when `β = 0`. It computes the sums of four elements of a column in each
+pass over column `j` of `A`, by the loops of `gemvT`, which gives the same sums and lets their
+additions overlap. As in the reference BLAS, it only scales `C` when `α = 0`,
 and returns `C` when `k = 0` and `β = 1`. It updates `C` in place when its array is not shared,
 and leaves the elements of the array outside the triangle unchanged.
 -/
