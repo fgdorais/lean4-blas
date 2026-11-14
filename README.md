@@ -134,7 +134,8 @@ the terms with `A[j, l] = 0`, so that an infinity or a `NaN` in `A` doesn't reac
 leaves `C` unchanged when `k = 0` and `β = 1`. As in the reference `dtrsm`, `trsm` and `trsmRight`
 set `B` to `0` without reading `A` or `B` when `α = 0`, scale `B` by `α` before solving, divide by
 the diagonal, and never skip a zero of `B`. `trsm` solves each column of `B` by the loops of
-`trsv`, so its specification is that of `trsv` on the scaled column; `trsmRight` is back
+`trsv`, four columns at a time, so its specification is that of `trsv` on the scaled column;
+`trsmRight` is back
 substitution along the rows, from the columns already solved.
 
 ## Conformance
@@ -149,13 +150,13 @@ differs from the reference BLAS, such as `iamax` counting from `0`, its document
 
 Speed comes second to proofs, and it is measured rather than promised. On the machines measured
 so far, the routines match the reference BLAS on Level 1 and surpass it on Level 2, `gemm` is
-about 4 times faster than its `dgemm`, `trsm` up to twice as fast as its `dtrsm`, `syrk` about as
-fast as its `dsyrk`, and `syrkT` about twice as fast.
+about 4 times faster than its `dgemm`, `trsm` 2 to 3 times as fast as its `dtrsm`, and `syrk` and
+`syrkT` about twice as fast as their `dsyrk`.
 
 Against OpenBLAS on one thread, the Level 1 updates and the Level 2 routines run at about its speed,
 the reductions such as `dot` and `iamax` at about half its speed, since their specifications fix
-the order of their operations, `gemm` about 4 times slower, and `trsm` 2 to 7 times slower. `syrk`
-and `syrkT` are the furthest behind, 7 to 18 times slower on matrices of 256 to 1024 rows, since
+the order of their operations, `gemm` about 4 times slower, and `trsm` 2 to 5 times slower. `syrk`
+and `syrkT` are the furthest behind, 5 to 11 times slower on matrices of 256 to 1024 rows, since
 they don't have a blocked kernel like `gemm`'s yet. OpenBLAS runs on several threads by default, and this
 library runs on one, so on a multi-core machine the gap is larger. These figures are for `Float64`.
 On `Float32`, whose vectors hold twice as many elements, the reductions and `gemm` fall further
