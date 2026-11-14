@@ -30,12 +30,11 @@ Changes that would reorder them, such as partial sums in `dot`, `asum` and `nrm2
 
 - [ ] `trsv`: update the rest of `x` four columns at a time after each block of four solved
   elements, as `gemv` does. Each element keeps its order of operations. Not measured yet.
-- [ ] `gemv` with strided `x` and `y` is 1.3–1.5× behind. Not investigated yet.
+- [ ] `gemv` with strided `x` and `y` is 1.3–1.5× behind, and 3.4–6.6× behind in `Float32`, where
+  Netlib is also 7–12% faster. Not investigated yet.
 
 ## Build
 
 - [ ] An opt-in Lake option for `-march=native`, which gives 10–30% on Level 2 and `gemm` and
   nothing on Level 1, but makes binaries that only run on CPUs like the one that built them. The
   tests pass with it, since `-ffp-contract=off` stays on.
-- [ ] Benchmark `Float32` and compare with `sgemm` and the other single-precision routines. The
-  `bench` exe is `Float64` only.
