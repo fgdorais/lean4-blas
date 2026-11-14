@@ -39,10 +39,10 @@ public def sweep4 (a c : Float64Array) (cj cj' a₀ a₁ a₂ a₃ len : USize)
     (t₀ t₁ t₂ t₃ s₀ s₁ s₂ s₃ : Float) : {c' : Float64Array // c'.size = c.size} :=
   inplace c do
     for i in 0...len do
-      let x₀ := a.uget (a₀ + i) (InPlaceSyntax.toNat_add_lt_of_window h₀ (by lia))
-      let x₁ := a.uget (a₁ + i) (InPlaceSyntax.toNat_add_lt_of_window h₁ (by lia))
-      let x₂ := a.uget (a₂ + i) (InPlaceSyntax.toNat_add_lt_of_window h₂ (by lia))
-      let x₃ := a.uget (a₃ + i) (InPlaceSyntax.toNat_add_lt_of_window h₃ (by lia))
+      let x₀ := a.uget (a₀ + i) (Notation.toNat_add_lt_of_window h₀ (by lia))
+      let x₁ := a.uget (a₁ + i) (Notation.toNat_add_lt_of_window h₁ (by lia))
+      let x₂ := a.uget (a₂ + i) (Notation.toNat_add_lt_of_window h₂ (by lia))
+      let x₃ := a.uget (a₃ + i) (Notation.toNat_add_lt_of_window h₃ (by lia))
       c[cj + i] := c[cj + i] + t₀ * x₀ + t₁ * x₁ + t₂ * x₂ + t₃ * x₃
       c[cj' + i] := c[cj' + i] + s₀ * x₀ + s₁ * x₁ + s₂ * x₂ + s₃ * x₃
   then fun _ c' h => ⟨c', h⟩
@@ -53,7 +53,7 @@ public def sweep2 (a c : Float64Array) (cj cj' al len : USize)
     (ha : al.toNat + len.toNat ≤ a.size) (t s : Float) : {c' : Float64Array // c'.size = c.size} :=
   inplace c do
     for i in 0...len do
-      let x := a.uget (al + i) (InPlaceSyntax.toNat_add_lt_of_window ha (by lia))
+      let x := a.uget (al + i) (Notation.toNat_add_lt_of_window ha (by lia))
       c[cj + i] := c[cj + i] + t * x
       c[cj' + i] := c[cj' + i] + s * x
   then fun _ c' h => ⟨c', h⟩
@@ -65,7 +65,7 @@ public def sweep1 (a c : Float64Array) (cj al len : USize)
   inplace c do
     for i in 0...len do
       c[cj + i] := c[cj + i] +
-        t * a.uget (al + i) (InPlaceSyntax.toNat_add_lt_of_window ha (by lia))
+        t * a.uget (al + i) (Notation.toNat_add_lt_of_window ha (by lia))
   then fun _ c' h => ⟨c', h⟩
 
 theorem getElem!_sweep4 (a c : Float64Array) (cj cj' a₀ a₁ a₂ a₃ len hc hc' h₀ h₁ h₂ h₃)
@@ -97,14 +97,14 @@ theorem getElem!_sweep4 (a c : Float64Array) (cj cj' a₀ a₁ a₂ a₃ len hc 
     simp only [Nat.add_zero]
   · intro i _ hi next c₁ h₁'
     simp only [Tail.run_readThen, Tail.run_writeThen]
-    apply Tail.run_congr
+    apply run_congr
     have hi' : i.toNat < len.toNat := by simpa using hi
     have e : ∀ {x : USize}, x.toNat + len.toNat ≤ c.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
     have ea : ∀ {x : USize}, x.toNat + len.toNat ≤ a.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
     simp only [Float64Array.uget_eq_getElem, e hc, e hc', ea h₀, ea h₁, ea h₂, ea h₃,
-      Float64Array.set_eq_set!, Float64Array.getElem_eq_getElem!]
+      set_eq_set!, getElem_eq_getElem!]
     rw [getElem!_set!_of_lt _ _ _ (by lia), ite_eq_right (by lia)]
 
 theorem getElem!_sweep2 (a c : Float64Array) (cj cj' al len hc hc' ha) (t s : Float)
@@ -127,14 +127,14 @@ theorem getElem!_sweep2 (a c : Float64Array) (cj cj' al len hc hc' ha) (t s : Fl
     simp only [Nat.add_zero]
   · intro i _ hi next c₁ h₁'
     simp only [Tail.run_readThen, Tail.run_writeThen]
-    apply Tail.run_congr
+    apply run_congr
     have hi' : i.toNat < len.toNat := by simpa using hi
     have e : ∀ {x : USize}, x.toNat + len.toNat ≤ c.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
     have ea : ∀ {x : USize}, x.toNat + len.toNat ≤ a.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
-    simp only [Float64Array.uget_eq_getElem, e hc, e hc', ea ha, Float64Array.set_eq_set!,
-      Float64Array.getElem_eq_getElem!]
+    simp only [Float64Array.uget_eq_getElem, e hc, e hc', ea ha, set_eq_set!,
+      getElem_eq_getElem!]
     rw [getElem!_set!_of_lt _ _ _ (by lia), ite_eq_right (by lia)]
 
 theorem getElem!_sweep1 (a c : Float64Array) (cj al len hc ha) (t : Float)
@@ -152,14 +152,14 @@ theorem getElem!_sweep1 (a c : Float64Array) (cj al len hc ha) (t : Float)
     simp only [Nat.add_zero]
   · intro i _ hi next c₁ h₁'
     simp only [Tail.run_readThen, Tail.run_writeThen]
-    apply Tail.run_congr
+    apply run_congr
     have hi' : i.toNat < len.toNat := by simpa using hi
     have e : ∀ {x : USize}, x.toNat + len.toNat ≤ c.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
     have ea : ∀ {x : USize}, x.toNat + len.toNat ≤ a.size → (x + i).toNat = x.toNat + i.toNat :=
       fun _ => by grind
-    simp only [Float64Array.uget_eq_getElem, e hc, ea ha, Float64Array.set_eq_set!,
-      Float64Array.getElem_eq_getElem!]
+    simp only [Float64Array.uget_eq_getElem, e hc, ea ha, set_eq_set!,
+      getElem_eq_getElem!]
 
 /-! ## The loops -/
 
@@ -217,21 +217,21 @@ public def gemmPairTerms (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFi
       (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw)
       (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw)
       (α * B.data.uget (k.toUSize * j + l)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * j + p₁)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * j + p₂)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * j + p₃)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * (j + 1) + l)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * (j + 1) + p₁)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * (j + 1) + p₂)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * (j + 1) + p₃)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
     gemmPairTerms α A B hs j hj i₀ len hw (p₃ + 1) l₁ (by rw [hp₄]; lia) hl₁ c'.1
       (by rw [c'.2, hc])
   else if h1 : l < l₁ then
@@ -241,9 +241,9 @@ public def gemmPairTerms (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFi
       rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw
     let c' := sweep2 A.data c (m.toUSize * j + i₀) (m.toUSize * (j + 1) + i₀)
       (m.toUSize * l + i₀) len hcj hcj' ha
-      (α * B.data.uget (k.toUSize * j + l) (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+      (α * B.data.uget (k.toUSize * j + l) (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
       (α * B.data.uget (k.toUSize * (j + 1) + l)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj' (by rw [hku]; lia)))
     gemmPairTerms α A B hs j hj i₀ len hw (l + 1) l₁ (by rw [hl1]; lia) hl₁ c'.1
       (by rw [c'.2, hc])
   else ⟨c, hc⟩
@@ -273,7 +273,7 @@ public def gemmColTerms (α : Float) (A : PMat m k) (B : PMat k n) (hs : gemmFit
       (by rw [hc]; exact toNat_mul_add_add_le hmu (by lia) hw)
       (by rw [A.size_data]; exact toNat_mul_add_add_le hmu (by lia) hw)
       (α * B.data.uget (k.toUSize * j + l)
-        (InPlaceSyntax.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
+        (Notation.toNat_add_lt_of_window hbj (by rw [hku]; lia)))
     gemmColTerms α A B hs j hj i₀ len hw (l + 1) l₁ (by rw [hl1]; lia) hl₁ c'.1
       (by rw [c'.2, hc])
   else ⟨c, hc⟩
@@ -393,7 +393,7 @@ public def gemmBlocked (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
         have hcj : cj.toNat + mu.toNat ≤ c.size :=
           toNat_mul_add_le (n := n) (by lia) (by rw [hmu, hc]; exact Nat.le_refl _)
         for i in 0...mu do
-          c[cj + i] := β * c[cj + i]
+          c[cj + i] := betaMul β c[cj + i]
     then fun _ c' h =>
       let c'' := gemmTermBlocks α A B hs 0 (by simp) c' (by rw [h, hc])
       ⟨c''.1, c''.2⟩
@@ -410,7 +410,7 @@ variable {m n k : Nat}
 /-- The element `(i, j)` of `gemm α A B β C` after its first `L` terms. -/
 def gemmPartial (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (i j L : Nat) : Float :=
-  Nat.fold L (fun l _ s => s + α * B.data[l + k * j]! * A.data[i + m * l]!) (β * C.data[i + m * j]!)
+  Nat.fold L (fun l _ s => s + α * B.data[l + k * j]! * A.data[i + m * l]!) (betaMul β C.data[i + m * j]!)
 
 theorem gemmPartial_succ (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (i j L : Nat) : gemmPartial α A B β C i j (L + 1) =
@@ -583,7 +583,7 @@ theorem gemmPairTerms_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float
   have hB : ∀ (jj ll : USize) (h), jj.toNat < n → ll.toNat ≤ k →
       α * B.data.uget (k.toUSize * jj + ll) h = α * B.data[ll.toNat + k * jj.toNat]! :=
     fun jj ll h hjj hll => by
-      rw [Float64Array.uget_eq_getElem, Float64Array.getElem_eq_getElem!,
+      rw [Float64Array.uget_eq_getElem, getElem_eq_getElem!,
         toNat_mul_add_eq hku hjj hll hs'.2.2.1, Nat.add_comm]
   obtain ⟨d, hd⟩ : ∃ d, l₁.toNat - l.toNat = d := ⟨_, rfl⟩
   induction d using Nat.strongRecOn generalizing l c cnt with
@@ -685,7 +685,7 @@ theorem gemmColTerms_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Float)
   have hB : ∀ (jj ll : USize) (h), jj.toNat < n → ll.toNat ≤ k →
       α * B.data.uget (k.toUSize * jj + ll) h = α * B.data[ll.toNat + k * jj.toNat]! :=
     fun jj ll h hjj hll => by
-      rw [Float64Array.uget_eq_getElem, Float64Array.getElem_eq_getElem!,
+      rw [Float64Array.uget_eq_getElem, getElem_eq_getElem!,
         toNat_mul_add_eq hku hjj hll hs'.2.2.1, Nat.add_comm]
   obtain ⟨d, hd⟩ : ∃ d, l₁.toNat - l.toNat = d := ⟨_, rfl⟩
   induction d using Nat.strongRecOn generalizing l c cnt with
@@ -884,14 +884,14 @@ theorem gemmTermBlocks_inv (α : Float) (A : PMat m k) (B : PMat k n) (β : Floa
 
 /-- The scaling pass of `gemmBlocked`, column by column. -/
 def betaPass (m : Nat) (β : Float) (j : Nat) (c : Float64Array) : Float64Array :=
-  iterRange (fun i c => c.set! (m * j + i) (β * c[m * j + i]!)) 0 m c
+  iterRange (fun i c => c.set! (m * j + i) (betaMul β c[m * j + i]!)) 0 m c
 
 theorem size_betaPass (m β j) (c : Float64Array) : (betaPass m β j c).size = c.size :=
   size_iterRange _ (by simp) _ _ _
 
 theorem getElem!_betaPass (m β j) (c : Float64Array) (q : Nat) (hq : q < c.size) :
-    (betaPass m β j c)[q]! = if m * j ≤ q ∧ q < m * j + m then β * c[q]! else c[q]! := by
-  have := getElem!_iterRange_set! (m * j) (fun _ x => β * x) 0 m c q hq
+    (betaPass m β j c)[q]! = if m * j ≤ q ∧ q < m * j + m then betaMul β c[q]! else c[q]! := by
+  have := getElem!_iterRange_set! (m * j) (fun _ x => betaMul β x) 0 m c q hq
   simpa [betaPass] using this
 
 theorem GemmInv.betaPass (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) :
@@ -938,12 +938,12 @@ public theorem gemmBlocked_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : F
       apply ext
       intro i j hij
       rw [← gemm_eq, getElem_gemm]
-      simp only [gemmEntry, getElem_def, Float64Array.getElem_eq_getElem!, USize.toNat_zero, hnu]
+      simp only [gemmEntry, getElem_def, getElem_eq_getElem!, USize.toNat_zero, hnu]
       rw [hinv i j hij.1 hij.2]
       rfl
     · intro j _ hj next a h
       rw [hnu] at hj
-      rw [Tail.run_forInFrom_unit (F := fun i c => c.set! (m * j.toNat + i) (β * c[m * j.toNat + i]!))
+      rw [Tail.run_forInFrom_unit (F := fun i c => c.set! (m * j.toNat + i) (betaMul β c[m * j.toNat + i]!))
           (hF := by simp)]
       · simp only [USize.toNat_zero, hmu, betaPass]
       · intro i _ hi next' a' h'
@@ -951,7 +951,7 @@ public theorem gemmBlocked_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : F
         simp only [Tail.run_readThen, Tail.run_writeThen]
         have h1 : (m.toUSize * j + i).toNat = m * j.toNat + i.toNat :=
           toNat_mul_add_eq hmu hj (by lia) hs'.1
-        apply Tail.run_set_eq_set!
+        apply run_set_eq_set!
         · exact h1
         · have := index_lt hi hj
           have hC := C.size_data

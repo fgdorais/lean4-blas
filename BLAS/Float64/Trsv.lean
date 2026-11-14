@@ -129,7 +129,7 @@ public def trsvLowerData (d : Diag) (A : Mat n n) (x : Vec n) : Float64Array :=
     (inplace a do
       for j in 0...nu do
         have hk : (o + c * j).toNat < a.size := x.toNat_index_lt hs.2 (by lia)
-        let v ← a[o + c * j]
+        let v := a[o + c * j]
         let t := d.apply v (A.uget ao al rfl rfl hs.1 j j (by lia) (by lia))
         a[o + c * j] := t
         have hr : (nu - j - 1).toNat = n - j.toNat - 1 := by grind
@@ -144,7 +144,7 @@ public def trsvLowerData (d : Diag) (A : Mat n n) (x : Vec n) : Float64Array :=
           a[o + c * (j + 1) + c * k] := a[o + c * (j + 1) + c * k] -
             t * A.uget ao al rfl rfl hs.1 (j + 1 + k) j
               (by
-                rw [USize.toNat_succ_add (Nat.lt_trans hjk (Nat.lt_of_le_of_lt x.le_size hs.2))]
+                rw [toNat_succ_add (Nat.lt_trans hjk (Nat.lt_of_le_of_lt x.le_size hs.2))]
                 exact hjk) (by lia)).2
   else iterRange (trsvLowerStep d A x) 0 n x.data
 
@@ -260,7 +260,7 @@ public def trsvUpperData (d : Diag) (A : Mat n n) (x : Vec n) : Float64Array :=
         have hj : (nu - 1 - k).toNat = n - 1 - k.toNat := by grind
         have hjn : (nu - 1 - k).toNat < n := by lia
         have hk : (o + c * (nu - 1 - k)).toNat < a.size := x.toNat_index_lt hs.2 hjn
-        let v ← a[o + c * (nu - 1 - k)]
+        let v := a[o + c * (nu - 1 - k)]
         let t := d.apply v
           (A.uget ao al rfl rfl hs.1 (nu - 1 - k) (nu - 1 - k) hjn hjn)
         a[o + c * (nu - 1 - k)] := t

@@ -5,7 +5,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 module
 
 public import ScalarArray
-import all BLAS.Internal
 
 /-!
 # Specifications of loops
@@ -22,6 +21,14 @@ indices are distinct and in bounds.
 open ScalarArray Float64Array InPlace
 
 namespace BLAS.Float64
+
+/-! ## Scaling by `β` -/
+
+/--
+`β * v`, or `0` when `β = 0`, without reading `v`: the reference BLAS scales `y` or `C` by `β` this
+way in `gemv` and `gemm`, so that a `NaN` or an infinity in them doesn't survive `β = 0`.
+-/
+@[inline, expose] public def betaMul (β v : Float) : Float := if β == 0 then 0 else β * v
 
 /-! ## Reductions -/
 
@@ -78,7 +85,7 @@ public theorem foldUpTo_eq {β : Type u} (n : Nat) (f : (i : Nat) → i < n → 
 /-! ## Elements -/
 
 /-- A program that writes `v` at a `USize` index runs as one that writes it with `set!`. -/
-public theorem Tail.run_set_eq_set! {N : Nat} {γ : Type} (t : InPlace.Tail N γ) (a : Float64Array)
+public theorem run_set_eq_set! {N : Nat} {γ : Type} (t : InPlace.Tail N γ) (a : Float64Array)
     (i : USize) (p : Nat) (hp : i.toNat = p) (v v' : Float) (hv : v = v') (h₁ h₂ h₃) :
     t.run (a.set i.toNat v h₁) h₂ = t.run (a.set! p v') h₃ := by
   subst hp hv
@@ -86,17 +93,17 @@ public theorem Tail.run_set_eq_set! {N : Nat} {γ : Type} (t : InPlace.Tail N γ
   simp [Float64Array.set!, h₁]
 
 /-- A program runs the same on equal arrays. -/
-public theorem Tail.run_congr {N : Nat} {γ : Type} (t : InPlace.Tail N γ) {a a' : Float64Array}
+public theorem run_congr {N : Nat} {γ : Type} (t : InPlace.Tail N γ) {a a' : Float64Array}
     (e : a = a') (h : a.size = N) (h' : a'.size = N) : t.run a h = t.run a' h' := by
   subst e; rfl
 
 /-- `set` is `set!` in bounds. -/
-public theorem Float64Array.set_eq_set! (a : Float64Array) (i : Nat) (v : Float) (h : i < a.size) :
+public theorem set_eq_set! (a : Float64Array) (i : Nat) (v : Float) (h : i < a.size) :
     a.set i v h = a.set! i v := by
   simp [Float64Array.set!, h]
 
 /-- `getElem` is `getElem!` in bounds. -/
-public theorem Float64Array.getElem_eq_getElem! (a : Float64Array) (i : Nat) (h : i < a.size) :
+public theorem getElem_eq_getElem! (a : Float64Array) (i : Nat) (h : i < a.size) :
     a[i] = a[i]! := (getElem!_pos a i h).symm
 
 /-! ## Loops of loops -/
@@ -212,7 +219,7 @@ public theorem getElem!_iterRange_set2! (off off' : Nat) (G G' : Nat → Float �
 /-! ## Updates at the indices of a stride -/
 
 /-- `set!` of the element already there leaves the array unchanged. -/
-public theorem Float64Array.set!_getElem!_self (a : Float64Array) (i : Nat) : a.set! i a[i]! = a := by
+public theorem set!_getElem!_self (a : Float64Array) (i : Nat) : a.set! i a[i]! = a := by
   apply ext_getElem (by simp)
   intro q _ _
   rw [getElem_set!]
@@ -226,7 +233,7 @@ public theorem modifyAt_id (a : Float64Array) (idx : Nat → Nat) (lo hi : Nat) 
   obtain ⟨d, hd⟩ : ∃ d, hi - lo = d := ⟨_, rfl⟩
   induction d generalizing lo with
   | zero => exact modifyAt_of_le _ _ (by lia) _
-  | succ d ih => rw [modifyAt_of_lt _ _ (by lia), Float64Array.set!_getElem!_self, ih _ (by lia)]
+  | succ d ih => rw [modifyAt_of_lt _ _ (by lia), set!_getElem!_self, ih _ (by lia)]
 
 /-- `modifyAt` depends only on the values of its update at the steps of its range. -/
 public theorem modifyAt_congr_fun (a : Float64Array) (idx : Nat → Nat) {lo hi : Nat}
@@ -237,7 +244,7 @@ public theorem modifyAt_congr_fun (a : Float64Array) (idx : Nat → Nat) {lo hi 
 /-- Writing at the index `idx j` is `modifyAt` over the single step `j`. -/
 public theorem set_eq_modifyAt (a : Float64Array) (idx : Nat → Nat) (j : Nat) (v : Float)
     (h : idx j < a.size) : a.set (idx j) v h = a.modifyAt idx j (j + 1) fun _ _ => v := by
-  rw [modifyAt_of_lt _ _ (Nat.lt_succ_self j), modifyAt_self, Float64Array.set_eq_set!]
+  rw [modifyAt_of_lt _ _ (Nat.lt_succ_self j), modifyAt_self, set_eq_set!]
 
 /--
 `modifyAt` over `lo ≤ i < hi` is `modifyAt` over a wider range, by the identity at the other
@@ -335,7 +342,7 @@ public theorem set_modifyAt_pred (a : Float64Array) {s : Stride} {N : Nat}
     (a.set p t h).modifyAt s.idx 0 j G =
       a.modifyAt s.idx 0 (j + 1) fun i v => if i = j then t else G i v := by
   subst hp
-  rw [modifyAt_succ_of_injOn _ _ (Nat.zero_le _) _ (hs.injOn hj), Float64Array.set_eq_set!]
+  rw [modifyAt_succ_of_injOn _ _ (Nat.zero_le _) _ (hs.injOn hj), set_eq_set!]
   simp only [↓reduceIte]
   exact modifyAt_congr _ (fun _ _ _ => rfl) (fun i _ h₂ => by
     funext v; simp [show i ≠ j by lia])

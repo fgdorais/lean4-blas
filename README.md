@@ -6,8 +6,10 @@ Basic Linear Algebra Subprograms written entirely in Lean 4, on the unboxed arra
 [lean4-scalar-arrays](https://github.com/fgdorais/lean4-scalar-arrays), with no C code of its own.
 The routines come with proved specifications; their speed is measured, not promised.
 
-The library is at an early stage. It has, on `Float64`, the BLAS Level 1 routines on strided vectors,
-and `gemv`, `ger`, `trsv` and `gemm` on matrices with an offset and a leading dimension.
+The library is at an early stage. It has, on `Float64` and `Float32`, the BLAS Level 1 routines on
+strided vectors, and `gemv`, `ger`, `trsv` and `gemm` on matrices with an offset and a leading
+dimension. The `Float32` routines are in `BLAS.Float32`, with the same names and specifications as
+those of `BLAS.Float64`, on `Float32Array`.
 
 ## Usage
 
@@ -22,33 +24,47 @@ def y : Vec 3 := .ofList [4, 5, 6]
 #eval (Vec.axpy 2 x y).toList  -- [6, 9, 12]
 #eval Vec.dot x y              -- 32
 
-example (α : Float) (x y : Vec n) (i : Nat) (h : i < n) :
-    (Vec.axpy α x y)[i] = α * x[i] + y[i] := by simp
+example (α : Float) (hα : (α == 0) = false) (x y : Vec n) (i : Nat) (h : i < n) :
+    (Vec.axpy α x y)[i] = α * x[i] + y[i] := by simp [hα]
 ```
 
 `Vec n` is a vector of `n` floats, stored in a `Float64Array` with an offset `off` and a stride
 `inc`, as in the reference BLAS: `x[i]` is at the index `off + inc * i`. The stride is positive,
 unless `n ≤ 1`. `Vec.ofFn`, `Vec.ofList` and `Vec.ofArray` make contiguous vectors, and
 `Vec.ofStride? a off inc` makes a strided view of the array `a`. Every routine has a specification
-as an exact `Float` equality, in the order the routine evaluates:
+as an exact `Float` equality, in the order the routine evaluates. The routines follow the
+semantics of the reference BLAS (Reference-LAPACK `master`), including its special cases, such as
+`α = 0` in `axpy`, which returns `y` without reading `x`:
 
 | Routine | Result | Specification |
 |---|---|---|
-| `axpy α x y` | `α * x + y`, over `y` | `(axpy α x y)[i] = α * x[i] + y[i]` |
+| `axpy α x y` | `α * x + y`, over `y` | `if α == 0 then y[i] else α * x[i] + y[i]` |
 | `scal α x` | `α * x`, over `x` | `(scal α x)[i] = α * x[i]` |
 | `copy x y` | `x`, over `y` | `(copy x y)[i] = x[i]` |
 | `swap x y` | `(y, x)` | `swap_fst`, `swap_snd` |
+| `rot c s x y` | `(c * x + s * y, c * y - s * x)`, over `x` and `y` | `getElem_rot_fst`, `getElem_rot_snd` |
+| `rotm p x y` | `H * (x, y)` for the modified rotation `p`, over `x` and `y` | `getElem_rotm_fst`, `getElem_rotm_snd` |
 | `dot x y` | `Σ x[i] * y[i]` | `Nat.fold n (fun i h s => s + x[i] * y[i]) 0` |
 | `asum x` | `Σ \|x[i]\|` | `Nat.fold n (fun i h s => s + x[i].abs) 0` |
-| `nrm2 x` | `√(Σ x[i] * x[i])` | `(Nat.fold n (fun i h s => s + x[i] * x[i]) 0).sqrt` |
-| `iamax x` | index of the first largest `\|x[i]\|` | `(Nat.fold n (iamaxStep x) (0, 0)).1` |
+| `nrm2 x` | `√(Σ x[i] * x[i])`, scaled | `nrm2Finish (Nat.fold n (nrm2Step x) (0, 0, 0))` |
+| `iamax x` | index of the first largest `\|x[i]\|`, or first `NaN` | `(Nat.fold n (iamaxStep x) (0, 0)).1` |
 
 The updates work in place when their output vector's array is not shared, and copy it once
 otherwise. They leave the elements of the array outside the vector unchanged: `data_axpy` and the
 other `data_` lemmas give the whole array as a scalar-arrays `modifyAt` of the old one, at the
 indices `x.stride.idx i` of the vector. The loops are the same
 for every stride, and run as fast at stride `1` as loops over contiguous indices.
-`nrm2` doesn't scale its elements, so unlike the reference BLAS it can overflow or underflow.
+`nrm2` is Blue's algorithm, as in the reference `dnrm2`: it sums the squares of the small, the
+mid-range and the big elements in three accumulators, scaled by powers of `2`, so it overflows or
+underflows only when the norm does. `iamax` counts from `0`, unlike the reference BLAS, and is `0`
+for the empty vector.
+
+`rotg a b` and `rotmg d1 d2 x1 y1` construct a rotation and a modified rotation, step for step as
+the reference `drotg` and `drotmg`, and return their results in the structures `Rotg` and `Rotmg`
+rather than in their arguments. A `RotmParam` is the reference `DPARAM`: its flag says which
+entries of `H` `rotm` reads, and `rotmg` fills the others with the values the flag implies. Where
+the reference `drotmg` loops forever, when `d1` or `d2` is or becomes infinite, `rotmg` stops after
+`Rotmg.fuel` rescaling steps.
 
 `Mat m n` is an `m × n` matrix, stored in column-major order with an offset `off` and a leading
 dimension `ld ≥ m`, as in the reference BLAS: `A[(i, j)]` is at the index `off + ld * j + i`.
@@ -59,11 +75,14 @@ same array, with no copy. `Mat.gemm α A B β C`, for `A : Mat m k`, `B : Mat k 
 
 ```lean
 (gemm α A B β C)[(i, j)] =
-  Nat.fold k (fun l _ s => s + α * B[(l, j)] * A[(i, l)]) (β * C[(i, j)])
+  if α == 0 then betaMul β C[(i, j)]
+  else Nat.fold k (fun l _ s => s + α * B[(l, j)] * A[(i, l)]) (betaMul β C[(i, j)])
 ```
 
-Unlike the reference BLAS, `β = 0` doesn't clear `C`, so a `NaN` in `C` stays a `NaN`. `data_gemm`
-gives the whole array of the result, so the elements outside `C` are unchanged.
+where `betaMul β v` is `β * v`, or `0` when `β = 0`: as in the reference BLAS, `β = 0` sets `C` to
+`0` without reading it, so a `NaN` in `C` doesn't survive, and `α = 0` only scales `C`, without
+reading `A` or `B`. `data_gemm` gives the whole array of the result, so the elements outside `C`
+are unchanged.
 
 `Mat.gemmBlocked` computes the same matrix about twice as fast. It works on blocks of 256 rows and
 128 terms, and sweeps the rows of a block for two columns of `C` and four terms at a time, which
@@ -80,10 +99,14 @@ operations of the reference BLAS in its order, although `gemv` and `gemvT` handl
 
 | Routine | Result | Specification |
 |---|---|---|
-| `gemv α A x β y` | `α * A * x + β * y`, over `y` | `Nat.fold n (fun j _ s => s + α * x[j] * A[(i, j)]) (β * y[i])` |
-| `gemvT α A x β y` | `α * Aᵀ * x + β * y`, over `y` | `β * y[j] + α * Nat.fold m (fun i _ s => s + A[(i, j)] * x[i]) 0` |
-| `ger α x y A` | `α * x * yᵀ + A`, over `A` | `A[(i, j)] + x[i] * (α * y[j])` |
+| `gemv α A x β y` | `α * A * x + β * y`, over `y` | `Nat.fold n (fun j _ s => s + α * x[j] * A[(i, j)]) (betaMul β y[i])` |
+| `gemvT α A x β y` | `α * Aᵀ * x + β * y`, over `y` | `betaMul β y[j] + α * Nat.fold m (fun i _ s => s + A[(i, j)] * x[i]) 0` |
+| `ger α x y A` | `α * x * yᵀ + A`, over `A` | `A[(i, j)] + x[i] * (α * y[j])`, or `A[(i, j)]` if `α = 0` or `y[j] = 0` |
 | `trsv uplo diag A x` | `A⁻¹ * x` for a triangular `A`, over `x` | `getElem_trsv_lower`, `getElem_trsv_upper` |
+
+These are the general cases. As in the reference BLAS, `gemv` and `gemvT` return `y` when the sum
+is empty (`n = 0`, resp. `m = 0`), only scale `y` when `α = 0`, and set it to `0` without reading
+it when `β = 0`; `ger` skips the columns with `y[j] = 0`. The `getElem_` lemmas state every case.
 
 `trsv` takes the triangle as a `Uplo` (`.upper` or `.lower`) and the diagonal as a `Diag` (`.unit`
 or `.nonUnit`), and reads nothing else of `A`. Its specification is back substitution, in the order of
@@ -102,7 +125,7 @@ The target is the behavior of the reference BLAS, as in the current `master` bra
 [Reference-LAPACK](https://github.com/Reference-LAPACK/lapack), rather than its last release. Each
 routine computes every element with the operations of the reference implementation, in the same
 order, so that the result is exact to the bit, and its specification says so. Where a routine still
-differs from the reference BLAS, such as the unscaled `nrm2` above, its documentation says how.
+differs from the reference BLAS, such as `iamax` counting from `0`, its documentation says how.
 
 ## Performance
 
@@ -127,9 +150,9 @@ Level 2 and `gemm`, but the binaries then only run on CPUs like the one that bui
 
 ## Installation
 
-The library depends only on lean4-scalar-arrays, pinned to an exact version, since the kernels use
-its experimental `inplace` notation. The `main` branch follows the newest Lean release, including
-release candidates, and the `nightly-testing` branch follows the newest Lean nightly.
+The library depends only on lean4-scalar-arrays, pinned to an exact version. The `main` branch
+follows the newest Lean release, including release candidates, and the `nightly-testing` branch
+follows the newest Lean nightly.
 
 ## Development
 
@@ -150,6 +173,20 @@ its Lean model.
 `USize` loop where there is one. `lake build` compiles it so that it keeps up with the API,
 but CI doesn't run it. To run it on GitHub, add the `benchmark` label to a pull request, which
 compares the pull request with its base, or start the Benchmarks workflow from the Actions tab.
+
+The `Float32` sources and tests, in `BLAS/Float32/` and `BLASTest/Float32/`, are generated from
+the `Float64` versions. Make changes in `BLAS/Float64/` and `BLASTest/Float64/`, then regenerate
+the `Float32` files:
+
+```bash
+python3 scripts/generate.py
+```
+
+Text that depends on the precision, such as the constants of `nrm2` and test tolerances, is
+translated by a table in the script, which fails if such text is left over.
+`python3 scripts/generate.py --check` changes nothing and fails if a generated file is out of date;
+CI runs it. The generated files are marked `linguist-generated` in `.gitattributes`, so GitHub
+collapses them in diffs.
 
 To compare with a C BLAS, such as OpenBLAS or Netlib's reference BLAS, build
 `scripts/cblas_bench.c`, which runs the same benchmarks through the CBLAS interface of a shared

@@ -5,6 +5,17 @@ on:
   workflow_dispatch:
 
 jobs:
+  generated:
+    name: generated files
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: check that the Float32 files are up to date
+        run: python3 scripts/generate.py --check
+
   build:
     name: build (${{ matrix.name }})
     # The tests precompile the library, so each platform compiles the `extern` C code natively.

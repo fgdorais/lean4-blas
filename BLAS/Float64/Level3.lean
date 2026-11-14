@@ -6,7 +6,7 @@ module
 
 public import BLAS.Float64.PMat
 public import BLAS.Float64.Loop
-public import ScalarArray.InPlaceSyntax
+public import ScalarArray.Notation
 import all BLAS.Internal
 
 /-!
@@ -37,12 +37,13 @@ namespace PMat
 variable {m n k : Nat}
 
 /--
-The value of `gemm α A B β C` at `(i, j)`: `β * C[i, j]`, plus the terms `α * B[l, j] * A[i, l]`
-for `l = 0, …, k - 1`, added from the left, in the order of the reference BLAS.
+The value of `gemm α A B β C` at `(i, j)`: `betaMul β C[i, j]`, plus the terms
+`α * B[l, j] * A[i, l]` for `l = 0, …, k - 1`, added from the left, in the order of the reference
+BLAS.
 -/
 @[expose] public def gemmEntry (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n)
     (i j : Nat) (hi : i < m) (hj : j < n) : Float :=
-  Nat.fold k (fun l hl s => s + α * B[(l, j)] * A[(i, l)]) (β * C[(i, j)])
+  Nat.fold k (fun l hl s => s + α * B[(l, j)] * A[(i, l)]) (betaMul β C[(i, j)])
 
 /-- The model of `gemm`, with `gemmEntry` at each element. -/
 public def gemmModel (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) :
@@ -51,9 +52,9 @@ public def gemmModel (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C 
 
 /--
 `gemm α A B β C` is `α * A * B + β * C`, by the naive loops of the reference BLAS: for each column
-`j`, it scales the column of `C` by `β`, then adds `α * B[l, j]` times column `l` of `A`, for
-`l = 0, …, k - 1`. It updates `C` in place when `C` is not shared. Unlike the reference BLAS, it
-doesn't special-case `β = 0`, so a `NaN` in `C` stays a `NaN`.
+`j`, it scales the column of `C` by `β`, or sets it to `0` without reading it when `β = 0`, then
+adds `α * B[l, j]` times column `l` of `A`, for `l = 0, …, k - 1`. It updates `C` in place when
+`C` is not shared. `Mat.gemm` handles the case `α = 0`, which doesn't run this kernel.
 -/
 public def gemm (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMat m n) : PMat m n :=
   if hs : m * n < USize.size ∧ m * k < USize.size ∧ k * n < USize.size ∧
@@ -76,7 +77,7 @@ public def gemm (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMa
         have hcj : cj.toNat + mu.toNat ≤ c.size :=
           toNat_mul_add_le (n := n) (by lia) (by rw [hmu, hc]; exact Nat.le_refl _)
         for i in 0...mu do
-          c[cj + i] := β * c[cj + i]
+          c[cj + i] := betaMul β c[cj + i]
         for l in 0...ku do
           let al := mu * l
           have hal : al.toNat + mu.toNat ≤ a.size :=
@@ -84,10 +85,10 @@ public def gemm (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (C : PMa
           let bj := ku * j
           have hbj : bj.toNat + ku.toNat ≤ b.size :=
             toNat_mul_add_le (n := n) (by lia) (by rw [hku, hb]; exact Nat.le_refl _)
-          let t := α * b.uget (bj + l) (InPlaceSyntax.toNat_add_lt_of_window hbj (by lia))
+          let t := α * b.uget (bj + l) (Notation.toNat_add_lt_of_window hbj (by lia))
           for i in 0...mu do
             c[cj + i] := c[cj + i] +
-              t * a.uget (al + i) (InPlaceSyntax.toNat_add_lt_of_window hal (by lia))
+              t * a.uget (al + i) (Notation.toNat_add_lt_of_window hal (by lia))
     then fun _ c' h => ⟨c', by rw [h, hc]⟩
   else gemmModel α A B β C
 
@@ -102,7 +103,7 @@ private def gemmCol (m k : Nat) (α : Float) (a b : Float64Array) (β : Float) (
     (c : Float64Array) : Float64Array :=
   iterRange (fun l c => iterRange (fun i c =>
       c.set! (m * j + i) (c[m * j + i]! + α * b[k * j + l]! * a[m * l + i]!)) 0 m c) 0 k
-    (iterRange (fun i c => c.set! (m * j + i) (β * c[m * j + i]!)) 0 m c)
+    (iterRange (fun i c => c.set! (m * j + i) (betaMul β c[m * j + i]!)) 0 m c)
 
 private theorem size_gemmCol (m k α a b β j) (c : Float64Array) :
     (gemmCol m k α a b β j c).size = c.size := by
@@ -115,7 +116,7 @@ private theorem getElem!_gemmCol_of_ne (α a b β) {i j j' : Nat} (hi : i < m) (
     rw [Nat.add_zero, col_window hi]; exact hj
   unfold gemmCol
   rw [getElem!_iterRange_of_frame]
-  · rw [getElem!_iterRange_set! (m * j') (fun _ v => β * v) _ _ _ _ hq, ite_eq_right hw]
+  · rw [getElem!_iterRange_set! (m * j') (fun _ v => betaMul β v) _ _ _ _ hq, ite_eq_right hw]
   · intro l _ _ c'
     by_cases hc : i + m * j < c'.size
     · rw [getElem!_iterRange_set! (m * j') (fun i v => v + α * b[k * j' + l]! * a[m * l + i]!)
@@ -125,13 +126,13 @@ private theorem getElem!_gemmCol_of_ne (α a b β) {i j j' : Nat} (hi : i < m) (
 private theorem getElem!_gemmCol (α a b β) {i j : Nat} (hi : i < m) (c : Float64Array)
     (hq : i + m * j < c.size) :
     (gemmCol m k α a b β j c)[i + m * j]! =
-      Nat.fold k (fun l _ s => s + α * b[k * j + l]! * a[m * l + i]!) (β * c[i + m * j]!) := by
+      Nat.fold k (fun l _ s => s + α * b[k * j + l]! * a[m * l + i]!) (betaMul β c[i + m * j]!) := by
   have hw : m * j + 0 ≤ i + m * j ∧ i + m * j < m * j + m := by lia
   have hsub : i + m * j - m * j = i := by lia
   unfold gemmCol
   rw [getElem!_iterRange_of_pointwise _ _ _ c.size
       (fun l _ s => s + α * b[k * j + l]! * a[m * l + i]!) (fun _ _ => by simp [size_iterRange])]
-  · rw [getElem!_iterRange_set! (m * j) (fun _ v => β * v) _ _ _ _ hq, ite_eq_left hw]
+  · rw [getElem!_iterRange_set! (m * j) (fun _ v => betaMul β v) _ _ _ _ hq, ite_eq_left hw]
   · intro l _ c' hc
     rw [getElem!_iterRange_set! (m * j) (fun i v => v + α * b[k * j + l]! * a[m * l + i]!)
       _ _ _ _ (by lia), ite_eq_left hw, hsub]
@@ -176,7 +177,7 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
         · rw [getElem!_neg c _ hc, getElem!_neg _ _ (by rw [size_gemmCol]; exact hc)]
     · intro j _ hj next a h
       rw [hnu] at hj
-      rw [Tail.run_forInFrom_unit (F := fun i c => c.set! (m * j.toNat + i) (β * c[m * j.toNat + i]!))
+      rw [Tail.run_forInFrom_unit (F := fun i c => c.set! (m * j.toNat + i) (betaMul β c[m * j.toNat + i]!))
           (hF := by simp)]
       · rw [Tail.run_forInFrom_unit (F := fun l c => iterRange (fun i c =>
             c.set! (m * j.toNat + i)
@@ -193,7 +194,7 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
           · intro i _ hi next'' a'' h''
             rw [hmu] at hi
             simp only [Tail.run_readThen, Tail.run_writeThen]
-            apply Tail.run_set_eq_set!
+            apply run_set_eq_set!
             · exact toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
             · have h1 := toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
               have h2 := toNat_mul_add_eq hku hj (Nat.le_of_lt hl) hs.2.2.1
@@ -207,7 +208,7 @@ public theorem gemm_eq (α : Float) (A : PMat m k) (B : PMat k n) (β : Float) (
       · intro i _ hi next' a' h'
         rw [hmu] at hi
         simp only [Tail.run_readThen, Tail.run_writeThen]
-        apply Tail.run_set_eq_set!
+        apply run_set_eq_set!
         · exact toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
         · have h1 := toNat_mul_add_eq hmu hj (Nat.le_of_lt hi) hs.1
           have := index_lt hi hj

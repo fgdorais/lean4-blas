@@ -25,7 +25,7 @@ namespace BLAS
 fact, but a `grind` proof inside an `inplace` loop body captures the loop's state and stops the loop
 lemmas from matching, so inner loop bodies use this lemma instead.
 -/
-private theorem USize.toNat_succ_add {j k : USize} (h : j.toNat + 1 + k.toNat < USize.size) :
+private theorem toNat_succ_add {j k : USize} (h : j.toNat + 1 + k.toNat < USize.size) :
     (j + 1 + k).toNat = j.toNat + 1 + k.toNat := by
   grind
 

@@ -80,6 +80,21 @@ where
       loop hs (z.uset i (α * x.uget i hx + z.uget i (by lia)) (by lia)) (by simp [hz]) (i + 1)
     else z
 
+/-- The plane rotation of `x` and `y` by `c` and `s`. -/
+partial def refRot (c s : Float) (x y : Float64Array) : Float64Array × Float64Array :=
+  if hs : x.size = y.size then loop hs x y rfl rfl 0 else (x, y)
+where
+  /-- The loop from index `i`, over `a` and `b` of the sizes of `x` and `y`. -/
+  loop (hs : x.size = y.size) (a b : Float64Array) (ha : a.size = x.size) (hb : b.size = y.size)
+      (i : USize) : Float64Array × Float64Array :=
+    if h : i < x.usize then
+      have hx := lt_size_of_lt_usize h
+      let u := a.uget i (by lia)
+      let v := b.uget i (by lia)
+      loop hs (a.uset i (c * u + s * v) (by lia)) (b.uset i (c * v - s * u) (by lia))
+        (by simp [ha]) (by simp [hb]) (i + 1)
+    else (a, b)
+
 /-- `α * x`. -/
 partial def refScal (α : Float) (x : Float64Array) : Float64Array :=
   loop x.usize x x.toNat_usize_le 0
@@ -137,7 +152,7 @@ theorem col_le {m j : USize} {a b c : Float64Array} (h : GemmSizes m a b c) (hj 
 /-- The element `off + i` of a column at `off`, for `i < m`. -/
 theorem idx_lt {m off i : USize} {p : Nat} (hw : off.toNat + m.toNat ≤ p) (hi : i < m) :
     (off + i).toNat < p :=
-  ScalarArray.InPlaceSyntax.toNat_add_lt_of_window hw (USize.lt_iff_toNat_lt.mp hi)
+  ScalarArray.Notation.toNat_add_lt_of_window hw (USize.lt_iff_toNat_lt.mp hi)
 
 /--
 `α * A * B + β * C` for `m × m` matrices, by the loops of the naive `gemm`: for each column `j` of
@@ -218,6 +233,16 @@ def rows (rounds n : Nat) : IO (List Row) := do
     for _ in [0:reps] do
       z := BLAS.Float64.Vec.copy v z
     return z.data[0]!
+  let rot ← time rounds n fun _ => Id.run do
+    let mut z := (v, w)
+    for _ in [0:reps] do
+      z := BLAS.Float64.Vec.rot 0.6 0.8 z.1 z.2
+    return z.1.data[0]! + z.2.data[0]!
+  let rot' ← time rounds n fun _ => Id.run do
+    let mut z := (x, w.data)
+    for _ in [0:reps] do
+      z := refRot 0.6 0.8 z.1 z.2
+    return z.1[0]! + z.2[0]!
   let dot ← time rounds n fun _ => BLAS.Float64.Vec.dot v v
   let dot' ← time rounds n fun _ => refDot x x
   let asum ← time rounds n fun _ => BLAS.Float64.Vec.asum v
@@ -241,7 +266,7 @@ def rows (rounds n : Nat) : IO (List Row) := do
   let dot2 ← time rounds n fun _ => BLAS.Float64.Vec.dot v2 v2
   return [⟨"sum (baseline)", sum, some sum'⟩, ⟨s!"axpy ×{reps}", axpy, some axpy'⟩,
     ⟨s!"scal ×{reps}", scal, some scal'⟩, ⟨s!"copy ×{reps}", copy, none⟩,
-    ⟨"dot", dot, some dot'⟩, ⟨"asum", asum, some asum'⟩, ⟨"nrm2", nrm2, some nrm2'⟩,
+    ⟨s!"rot ×{reps}", rot, some rot'⟩, ⟨"dot", dot, some dot'⟩, ⟨"asum", asum, some asum'⟩, ⟨"nrm2", nrm2, some nrm2'⟩,
     ⟨"iamax", iamax, some iamax'⟩, ⟨"iamax (increasing)", iamaxUp, some iamaxUp'⟩,
     ⟨s!"axpy ×{reps}, stride 2 / stride 1", axpy2, some axpy⟩,
     ⟨"dot, stride 2 / stride 1", dot2, some dot⟩]
