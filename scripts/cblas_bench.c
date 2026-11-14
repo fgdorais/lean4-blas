@@ -35,6 +35,7 @@ static void (*dcopy)(int, const double *, int, double *, int);
 static double (*dasum)(int, const double *, int);
 static double (*dnrm2)(int, const double *, int);
 static size_t (*idamax)(int, const double *, int);
+static void (*drot)(int, double *, int, double *, int, double, double);
 static void (*dgemv)(int, int, int, int, double, const double *, int, const double *, int,
                      double, double *, int);
 static void (*dger)(int, int, int, double, const double *, int, const double *, int, double *,
@@ -89,10 +90,10 @@ static double *mat(int m, int s) {
   return a;
 }
 
-/* What a benchmark works on: `x` is read, `z` is a scratch copy, `inc` is the stride. */
+/* What a benchmark works on: `x` is read, `z` and `w` are scratch copies, `inc` is the stride. */
 typedef struct {
   int n, inc;
-  double *x, *z;
+  double *x, *z, *w;
 } L1;
 
 /* The updates copy their input first, as the first update of `lake exe bench` does. */
@@ -112,6 +113,14 @@ static double b_copy(void *e) {
   L1 *v = e;
   for (int k = 0; k < reps; k++) dcopy(v->n, v->x, 1, v->z, 1);
   return v->z[0];
+}
+/* `rot` copies both inputs first, as the first rotation of `lake exe bench` does. */
+static double b_rot(void *e) {
+  L1 *v = e;
+  dcopy(v->n, v->x, 1, v->z, 1);
+  for (int i = 0; i < v->n; i++) v->w[i] = i;
+  for (int k = 0; k < reps; k++) drot(v->n, v->z, 1, v->w, 1, 0.6, 0.8);
+  return v->z[0] + v->w[0];
 }
 static double b_dot(void *e) {
   L1 *v = e;
@@ -200,27 +209,30 @@ int main(int argc, char **argv) {
   dasum = sym(lib, "cblas_dasum");
   dnrm2 = sym(lib, "cblas_dnrm2");
   idamax = sym(lib, "cblas_idamax");
+  drot = sym(lib, "cblas_drot");
   dgemv = sym(lib, "cblas_dgemv");
   dger = sym(lib, "cblas_dger");
   dtrsv = sym(lib, "cblas_dtrsv");
   dgemm = sym(lib, "cblas_dgemm");
 
   char name[64];
-  L1 v = {n, 1, vec(n), vec(n)};
+  L1 v = {n, 1, vec(n), vec(n), vec(n)};
   snprintf(name, sizeof name, "axpy ×%d", reps);
   time_it(name, b_axpy, &v);
   snprintf(name, sizeof name, "scal ×%d", reps);
   time_it(name, b_scal, &v);
   snprintf(name, sizeof name, "copy ×%d", reps);
   time_it(name, b_copy, &v);
+  snprintf(name, sizeof name, "rot ×%d", reps);
+  time_it(name, b_rot, &v);
   time_it("dot", b_dot, &v);
   time_it("asum", b_asum, &v);
   time_it("nrm2", b_nrm2, &v);
   time_it("iamax", b_iamax, &v);
-  L1 up = {n, 1, malloc(n * sizeof(double)), v.z};
+  L1 up = {n, 1, malloc(n * sizeof(double)), v.z, v.w};
   for (int i = 0; i < n; i++) up.x[i] = i;
   time_it("iamax (increasing)", b_iamax, &up);
-  L1 v2 = {n, 2, vec(2 * (size_t)n), vec(2 * (size_t)n)};
+  L1 v2 = {n, 2, vec(2 * (size_t)n), vec(2 * (size_t)n), NULL};
   snprintf(name, sizeof name, "axpy ×%d, stride 2 / stride 1", reps);
   time_it(name, b_axpy, &v2);
   time_it("dot, stride 2 / stride 1", b_dot, &v2);

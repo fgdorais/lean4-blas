@@ -130,11 +130,16 @@ differs from the reference BLAS, such as `iamax` counting from `0`, its document
 ## Performance
 
 Speed comes second to proofs, and it is measured rather than promised. On the machines measured
-so far, the routines match the reference BLAS on Level 1 and surpass it on Level 2, and `gemm` is
-several times faster. Against OpenBLAS on one thread, we don't expect any routine to be more than about 5 times
-slower: the memory-bound Level 1 routines and `gemv` are close to it, and `gemm` is the furthest
-behind. OpenBLAS runs on several threads by default, and this library runs on one, so on a
-multi-core machine the gap is larger. `scripts/blas_compare.py`, below, measures both comparisons.
+so far, the routines match the reference BLAS on Level 1 and surpass it on Level 2, and
+`gemmBlocked` is about 4 times faster than its `dgemm`.
+
+Against OpenBLAS on one thread, we don't expect any routine to be more than about 5 times slower.
+The Level 1 updates and the Level 2 routines run at about its speed, the reductions such as `dot`
+and `iamax` at about half its speed, since their specifications fix the order of their operations,
+and `gemmBlocked` is the furthest behind. The plain `gemm` is slower still: use `gemmBlocked`,
+which gives the same result to the bit. OpenBLAS runs on several threads by default, and this
+library runs on one, so on a multi-core machine the gap is larger. `scripts/blas_compare.py`,
+below, measures both comparisons.
 
 ### Compiler options
 
