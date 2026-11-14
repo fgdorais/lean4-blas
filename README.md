@@ -120,9 +120,9 @@ from `l = n - 1` down to `i + 1`.
 
 ## Installation
 
-The library depends only on lean4-scalar-arrays, pinned to an exact version, since the kernels use
-its experimental `inplace` notation. The `main` branch follows the newest Lean release, including
-release candidates, and the `nightly-testing` branch follows the newest Lean nightly.
+The library depends only on lean4-scalar-arrays, pinned to an exact version. The `main` branch
+follows the newest Lean release, including release candidates, and the `nightly-testing` branch
+follows the newest Lean nightly.
 
 ## Development
 

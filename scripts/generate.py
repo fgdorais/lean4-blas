@@ -69,6 +69,24 @@ SPECIFIC = [
   ('trsvMatches 300 u d', 'trsvMatches 80 u d'),
   # The tolerance of the residual of `trsv`.
   ('< 1e-12', '< 1e-4'),
+  # The rotations: the reference routines, and the constants of `srotg.f90` and `srotmg.f`.
+  ('`drot`', '`srot`'),
+  ('`drotm`', '`srotm`'),
+  ('`drotg`', '`srotg`'),
+  ('`drotmg`', '`srotmg`'),
+  ('`2⁻¹⁰²²`', '`2⁻¹²⁶`'),
+  ('Float.ofBits 0x0010000000000000', 'Float32.ofBits 0x00800000'),
+  ('`2¹⁰²³`', '`2¹²⁷`'),
+  ('Float.ofBits 0x7FE0000000000000', 'Float32.ofBits 0x7F000000'),
+  ("the literal `16777216.D0`, which is `gam * gam`", "the literal `1.67772E7`, a little less than `gam * gam`"),
+  ('public def gamsq : Float := 16777216', 'public def gamsq : Float := 1.67772e7'),
+  ('the literal `5.9604645D-8`', 'the literal `5.96046E-8`'),
+  ('public def rgamsq : Float := 5.9604645e-8', 'public def rgamsq : Float := 5.96046e-8'),
+  # The tests of `rotg` whose squares overflow or underflow.
+  ('Float.scaleB 3 1000) (Float.scaleB 4 1000)).r == Float.scaleB 5 1000',
+   'Float.scaleB 3 120) (Float.scaleB 4 120)).r == Float.scaleB 5 120'),
+  ('Float.scaleB 3 (-1000)) (Float.scaleB 4 (-1000))).r == Float.scaleB 5 (-1000)',
+   'Float.scaleB 3 (-120)) (Float.scaleB 4 (-120))).r == Float.scaleB 5 (-120)'),
 ]
 
 # The mechanical translation, after `SPECIFIC`: regular expressions and their replacements.

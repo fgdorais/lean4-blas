@@ -271,8 +271,8 @@ def rotmInPlace (n : Nat) : Bool :=
   let g := rotg 0 (-2)
   g.r == -2 && g.c == 0 && g.s == 1 && g.z == 1
 -- No overflow or underflow in `r`.
-#guard (rotg 3e300 4e300).r == 5e300
-#guard (rotg 3e-300 4e-300).r == 5e-300
+#guard (rotg (Float.scaleB 3 1000) (Float.scaleB 4 1000)).r == Float.scaleB 5 1000
+#guard (rotg (Float.scaleB 3 (-1000)) (Float.scaleB 4 (-1000))).r == Float.scaleB 5 (-1000)
 
 #guard
   let m := rotmg 1 1 3 0
@@ -290,6 +290,6 @@ def rotmInPlace (n : Nat) : Bool :=
     m.x1 == 2.5
 -- Rescaling writes out the implied entries and sets the flag to `-1`.
 #guard
-  let m := rotmg 1e10 1e10 2 1
+  let m := rotmg (Float.scaleB 1.25 30) (Float.scaleB 1.25 30) 2 1
   m.param.flag == -1 && m.param.h11 == 4096 && m.param.h21 == -2048 && m.param.h12 == 2048 &&
-    m.param.h22 == 4096 && m.d1 == 8e9 / 16777216 && m.d2 == 8e9 / 16777216 && m.x1 == 2.5 * 4096
+    m.param.h22 == 4096 && m.d1 == 64 && m.d2 == 64 && m.x1 == 2.5 * 4096

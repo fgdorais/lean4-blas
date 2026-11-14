@@ -7,6 +7,7 @@ module
 public import BLAS.Float32.Vec
 public import BLAS.Float32.Loop
 public import BLAS.Float32.Level1
+public import BLAS.Float32.Rot
 public import BLAS.Float32.PMat
 public import BLAS.Float32.Mat
 public import BLAS.Float32.Level2
