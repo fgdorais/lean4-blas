@@ -230,7 +230,8 @@ public theorem mapMat_of_le (a : Float64Array) (off ld m lo hi g) (h : hi ≤ lo
   exact getElem_mapMat_of_ne a off ld m lo hi g (fun i j _ h₁ h₂ => by lia) hp
 
 /-- `mapMat` depends only on the values of its function in the matrix. -/
-public theorem mapMat_congr (a : Float64Array) (off ld m lo hi : Nat) {g g' : Nat → Nat → Float → Float}
+public theorem mapMat_congr (a : Float64Array) (off ld m lo hi : Nat)
+    {g g' : Nat → Nat → Float → Float}
     (h : ∀ i j v, i < m → lo ≤ j → j < hi → g i j v = g' i j v) :
     mapMat a off ld m lo hi g = mapMat a off ld m lo hi g' := by
   apply ext_getElem (by simp)
@@ -433,7 +434,8 @@ public theorem getElem!_mapMat_col (a : Float64Array) (off ld lo hi : Nat)
 
 /-- `set!` of an element of a column of a `mapMat` sets it in its function. -/
 public theorem set!_mapMat_col (s : Float64Array) (off ld : Nat) (hml : m ≤ ld) {lo hi c : Nat}
-    (hc : lo ≤ c ∧ c < hi) {r : Nat} (hr : r < m) (g : Nat → Nat → Float → Float) (x : Float) :
+    (hc : lo ≤ c ∧ c < hi) {r : Nat} (hr : r < m) (g : Nat → Nat → Float → Float)
+    (x : Float) :
     (mapMat s off ld m lo hi g).set! (off + ld * c + r) x =
       mapMat s off ld m lo hi fun i k v => if k = c ∧ r ≤ i ∧ i < r + 1 then x else g i k v := by
   rw [← modifyAt_col_mapMat_mid s off ld hml hc (r₀ := r) (r₁ := r + 1) hr g (fun _ _ => x),
@@ -443,7 +445,8 @@ public theorem set!_mapMat_col (s : Float64Array) (off ld : Nat) (hml : m ≤ ld
 /-- `set!` of an element of a column of a `mapMat` to a function of it maps it in its function. -/
 public theorem set!_mapMat_col_fun (s : Float64Array) (off ld : Nat) (hml : m ≤ ld)
     {lo hi c : Nat} (hc : lo ≤ c ∧ c < hi) {r : Nat} (hr : r < m)
-    (hp : off + ld * c + r < s.size) (g : Nat → Nat → Float → Float) (G : Float → Float) {x : Float}
+    (hp : off + ld * c + r < s.size) (g : Nat → Nat → Float → Float) (G : Float → Float)
+    {x : Float}
     (hx : x = G (g r c s[off + ld * c + r]!)) :
     (mapMat s off ld m lo hi g).set! (off + ld * c + r) x =
       mapMat s off ld m lo hi fun i k v =>
@@ -487,7 +490,9 @@ public theorem iterRange_rows2_mapMat (s : Float64Array) (off ld : Nat) (hml : m
       rw [set!_mapMat_col_fun s off ld hml h₀ (by lia) (by lia) g (f₀ r₀)
           (by rw [getElem!_mapMat_col s off ld lo hi g hml h₀ (by lia) (by lia)]),
         set!_mapMat_col_fun s off ld hml h₁ (by lia) (by lia) _ (f₁ r₀)
-          (by rw [getElem!_mapMat_col s off ld lo hi g hml h₁ (by lia) (by lia)]; simp [Ne.symm hne])]
+          (by
+            rw [getElem!_mapMat_col s off ld lo hi g hml h₁ (by lia) (by lia)]
+            simp [Ne.symm hne])]
       apply mapMat_congr
       intro i c v _ _ _
       by_cases hi : i = r₀
@@ -630,9 +635,11 @@ theorem copySlice_mapMat (P : PMat m n) (a : Float64Array) (off ld j : Nat) (hml
     congr 1
     lia
   · have hne : ∀ i, i < m → p ≠ off + ld * j + i := fun i hi e => hw (by lia)
-    have e : (if h : p < min (off + ld * j) (mapMat a off ld m 0 j fun i j _ => P.data[i + m * j]!).size
+    have e : (if h : p < min (off + ld * j)
+            (mapMat a off ld m 0 j fun i j _ => P.data[i + m * j]!).size
         then (mapMat a off ld m 0 j fun i j _ => P.data[i + m * j]!)[p]'(by lia)
-        else if h₂ : p - min (off + ld * j) (mapMat a off ld m 0 j fun i j _ => P.data[i + m * j]!).size <
+        else if h₂ : p - min (off + ld * j)
+            (mapMat a off ld m 0 j fun i j _ => P.data[i + m * j]!).size <
           min m (P.data.size - m * j) then P.data[m * j + (p - min (off + ld * j)
             (mapMat a off ld m 0 j fun i j _ => P.data[i + m * j]!).size)]'(by lia)
         else (mapMat a off ld m 0 j fun i j _ => P.data[i + m * j]!)[p]'(by lia)) =
@@ -667,7 +674,8 @@ theorem unpackCols_eq (P : PMat m n) (a : Float64Array) (off ld j : Nat) (hml : 
     obtain rfl : j = n := by lia
     rw [unpackCols, ite_eq_right (Nat.lt_irrefl _)]
   | succ d ih =>
-    rw [unpackCols, ite_eq_left (by lia), copySlice_mapMat P a off ld j hml (by lia) (hcol j (by lia)),
+    rw [unpackCols, ite_eq_left (by lia),
+      copySlice_mapMat P a off ld j hml (by lia) (hcol j (by lia)),
       ih (j + 1) (by lia) (by lia)]
 
 /--

@@ -9,9 +9,15 @@ import BLASTest.Util
 meta import BLAS
 meta import BLASTest.Util
 
+/-!
+Tests for `gemv`, `gemvT`, `ger` and `trsv` on `Float`.
+-/
+
 open BLAS.Float64
 
-/-- The value of the elements outside the vectors and matrices of the tests, which no test computes. -/
+/--
+The value of the elements outside the vectors and matrices of the tests, which no test computes.
+-/
 def mark : Float := 1e9 + 0.5
 
 /-- An `m × n` matrix of small integers computed from the indices and the seed `s`. -/
@@ -105,15 +111,20 @@ def gemvMatches (m n : Nat) (α β : Float) : Bool :=
 
 -- As in the reference BLAS, `β = 0` sets `y` to `0` without reading it, so a `NaN` in `y` goes.
 #guard (Mat.gemv 1 (mat 1 1) (vec 1) 0 (.ofList [0 / 0])).toList == [(mat 1 1)[(0, 0)] * (vec 1)[0]]
-#guard (Mat.gemvT 1 (mat 1 1) (vec 1) 0 (.ofList [0 / 0])).toList == [(mat 1 1)[(0, 0)] * (vec 1)[0]]
+#guard (Mat.gemvT 1 (mat 1 1) (vec 1) 0 (.ofList [0 / 0])).toList ==
+  [(mat 1 1)[(0, 0)] * (vec 1)[0]]
 
 -- `α = 0` only scales `y`, without reading `A` or `x`.
-#guard (Mat.gemv (m := 1) (n := 1) 0 (.ofFn fun _ _ => 0 / 0) (.ofList [1 / 0]) 2 (.ofList [3])).toList == [6]
-#guard (Mat.gemvT (m := 1) (n := 1) 0 (.ofFn fun _ _ => 0 / 0) (.ofList [1 / 0]) 2 (.ofList [3])).toList == [6]
+#guard (Mat.gemv (m := 1) (n := 1) 0 (.ofFn fun _ _ => 0 / 0) (.ofList [1 / 0]) 2
+  (.ofList [3])).toList == [6]
+#guard (Mat.gemvT (m := 1) (n := 1) 0 (.ofFn fun _ _ => 0 / 0) (.ofList [1 / 0]) 2
+  (.ofList [3])).toList == [6]
 
 -- An empty sum returns `y`, unscaled.
-#guard (Mat.gemv (m := 2) (n := 0) 1 (.ofFn fun _ _ => 0) (.ofList []) 2 (.ofList [1, 0 / 0])).toList.head? == some 1
-#guard (Mat.gemvT (m := 0) (n := 2) 1 (.ofFn fun _ _ => 0) (.ofList []) 2 (.ofList [1, 3])).toList == [1, 3]
+#guard (Mat.gemv (m := 2) (n := 0) 1 (.ofFn fun _ _ => 0) (.ofList []) 2
+  (.ofList [1, 0 / 0])).toList.head? == some 1
+#guard (Mat.gemvT (m := 0) (n := 2) 1 (.ofFn fun _ _ => 0) (.ofList []) 2
+  (.ofList [1, 3])).toList == [1, 3]
 
 /-- Whether `gemv` and `gemvT` update an unshared `y` in place. -/
 def gemvInPlace (m : Nat) : Bool :=
@@ -127,10 +138,10 @@ def gemvInPlace (m : Nat) : Bool :=
 /-! ## `ger` -/
 
 -- `[1, 2] * [3, 4]ᵀ`, in column-major order.
-#guard (Mat.ger (m := 2) (n := 2) 1 (.ofList [1, 2]) (.ofList [3, 4]) (.ofFn fun _ _ => 0)).toList ==
-  [3, 6, 4, 8]
-#guard (Mat.ger (m := 2) (n := 2) 2 (.ofList [1, 2]) (.ofList [3, 4]) (.ofFn fun _ _ => 1)).toList ==
-  [7, 13, 9, 17]
+#guard (Mat.ger (m := 2) (n := 2) 1 (.ofList [1, 2]) (.ofList [3, 4])
+  (.ofFn fun _ _ => 0)).toList == [3, 6, 4, 8]
+#guard (Mat.ger (m := 2) (n := 2) 2 (.ofList [1, 2]) (.ofList [3, 4])
+  (.ofFn fun _ _ => 1)).toList == [7, 13, 9, 17]
 
 /-- The spec of `ger`, on lists. -/
 def gerList (α : Float) (x : Vec m) (y : Vec n) (A : Mat m n) : List Float :=
@@ -155,10 +166,10 @@ def gerMatches (m n : Nat) (α : Float) : Bool :=
 
 -- As in the reference BLAS, `α = 0` returns `A`, and a column with `y[j] = 0` is skipped, so an
 -- infinity in `x` doesn't reach it.
-#guard (Mat.ger (m := 2) (n := 2) 0 (.ofList [1 / 0, 1]) (.ofList [1, 1]) (.ofFn fun _ _ => 1)).toList ==
-  [1, 1, 1, 1]
-#guard (Mat.ger (m := 2) (n := 2) 1 (.ofList [1 / 0, 1]) (.ofList [0, 1]) (.ofFn fun _ _ => 1)).toList ==
-  [1, 1, 1 / 0, 2]
+#guard (Mat.ger (m := 2) (n := 2) 0 (.ofList [1 / 0, 1]) (.ofList [1, 1])
+  (.ofFn fun _ _ => 1)).toList == [1, 1, 1, 1]
+#guard (Mat.ger (m := 2) (n := 2) 1 (.ofList [1 / 0, 1]) (.ofList [0, 1])
+  (.ofFn fun _ _ => 1)).toList == [1, 1, 1 / 0, 2]
 
 /-- Whether `ger` updates an unshared `A` in place. -/
 def gerInPlace (m : Nat) : Bool :=
@@ -169,7 +180,8 @@ def gerInPlace (m : Nat) : Bool :=
 
 /-! ## `trsv` -/
 
--- `[[2, 0], [1, 1]] * y = [4, 3]` gives `y = [2, 1]`; `[[2, 1], [0, 1]] * y = [5, 1]` gives `[2, 1]`.
+-- `[[2, 0], [1, 1]] * y = [4, 3]` gives `y = [2, 1]`; `[[2, 1], [0, 1]] * y = [5, 1]` gives
+-- `[2, 1]`.
 #guard
   let A : Mat 2 2 := .ofPMat ⟨.ofList [2, 1, 1, 1], by decide⟩
   (Mat.trsv .lower .nonUnit A (.ofList [4, 3])).toList == [2, 1] &&

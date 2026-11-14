@@ -22,7 +22,9 @@ open ScalarArray Float32Array InPlace
 
 namespace BLAS.Float32
 
-/-- Whether the element `(i, j)` is in the triangle `u`: `i ≤ j` for `.upper`, `j ≤ i` for `.lower`. -/
+/--
+Whether the element `(i, j)` is in the triangle `u`: `i ≤ j` for `.upper`, `j ≤ i` for `.lower`.
+-/
 @[expose] public def Uplo.contains : Uplo → Nat → Nat → Bool
   | .upper, i, j => decide (i ≤ j)
   | .lower, i, j => decide (j ≤ i)
@@ -141,7 +143,8 @@ public def syrkColData (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32)
     (inplace c do
       for i in lo...hi do
         have hk : (cj + 1 * i).toNat < c.size :=
-          C.toNat_col_index_lt hs.2.1 (lt_of_hiU (u := uplo) (j := ju) hnu (by lia) (by assumption)) (by lia)
+          C.toNat_col_index_lt hs.2.1
+            (lt_of_hiU (u := uplo) (j := ju) hnu (by lia) (by assumption)) (by lia)
         c[cj + 1 * i] := betaMul β c[cj + 1 * i]
       for l in 0...ku do
         let ajl := A.uget ao al rfl rfl hs.1 ju l (by lia) (by lia)
@@ -151,15 +154,18 @@ public def syrkColData (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32)
         have hh : hi'.toNat ≤ hi.toNat := syrkRows_le (uplo.loU_le_hiU hnu (by lia)) _
         for i in lo...hi' do
           have hk : (cj + 1 * i).toNat < c.size :=
-            C.toNat_col_index_lt hs.2.1 (lt_of_hiU (u := uplo) (j := ju) hnu (by lia) (by lia)) (by lia)
+            C.toNat_col_index_lt hs.2.1
+              (lt_of_hiU (u := uplo) (j := ju) hnu (by lia) (by lia)) (by lia)
           c[cj + 1 * i] := c[cj + 1 * i] +
-            t * A.uget ao al rfl rfl hs.1 i l (lt_of_hiU (u := uplo) (j := ju) hnu (by lia) (by lia)) (by lia)).2
+            t * A.uget ao al rfl rfl hs.1 i l
+              (lt_of_hiU (u := uplo) (j := ju) hnu (by lia) (by lia)) (by lia)).2
   else C.data.modifyAt (Stride.mk (C.off + C.ld * j) 1).idx 0 n fun i v => syrkAt uplo α A β i j v
 
 public theorem syrkColData_eq (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32) (C : Mat n n)
     (j : Nat) (hj : j < n) :
     syrkColData uplo α A β C j hj =
-      C.data.modifyAt (Stride.mk (C.off + C.ld * j) 1).idx 0 n fun i v => syrkAt uplo α A β i j v := by
+      C.data.modifyAt (Stride.mk (C.off + C.ld * j) 1).idx 0 n fun i v =>
+        syrkAt uplo α A β i j v := by
   unfold syrkColData
   split
   · rename_i hs
@@ -173,8 +179,10 @@ public theorem syrkColData_eq (uplo : Uplo) (α : Float32) (A : Mat n k) (β : F
       (he := fun i _ hi => C.toNat_col_index hs.2.1 (lt_of_hiU (u := uplo) hnu hj' hi) hj')]
     · rw [Tail.run_forInFrom_unit (F := fun l c =>
         c.modifyAt (Stride.mk (C.off + C.ld * j.toUSize.toNat) 1).idx (uplo.lo j.toUSize.toNat)
-          (uplo.hi n j.toUSize.toNat) fun i v => syrkTerm α A l i j.toUSize.toNat v) (hF := by simp)]
-      · simp only [Tail.run_done, USize.toNat_zero, hku, uplo.toNat_loU, uplo.toNat_hiU hnu hj', hju]
+          (uplo.hi n j.toUSize.toNat) fun i v => syrkTerm α A l i j.toUSize.toNat v)
+          (hF := by simp)]
+      · simp only [Tail.run_done, USize.toNat_zero, hku, uplo.toNat_loU, uplo.toNat_hiU hnu hj',
+          hju]
         rw [iterRange_modifyAt _ _ (col_injOn _ _ _), modifyAt_modifyAt _ _ (col_injOn _ _ _),
           modifyAt_widen (lo' := 0) (hi' := n) _ _ _ (Nat.zero_le _) (uplo.lo_le_hi hj)
             (uplo.hi_le hj)]
@@ -279,8 +287,8 @@ theorem syrk2Step_mapMat (uplo : Uplo) (α : Float32) (A : Mat n k) (s : Float32
   all_goals (first | rfl | (exfalso; lia))
 
 /-- The steps `l < t` of `syrk2Step` add the terms `l < t` to the two columns. -/
-theorem iterRange_syrk2Step (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32) (s : Float32Array)
-    (off ld : Nat) (hml : n ≤ ld) {j : Nat} (hj : j + 1 < n)
+theorem iterRange_syrk2Step (uplo : Uplo) (α : Float32) (A : Mat n k) (β : Float32)
+    (s : Float32Array) (off ld : Nat) (hml : n ≤ ld) {j : Nat} (hj : j + 1 < n)
     (hq : off + ld * (j + 1) + n ≤ s.size) (t : Nat) :
     iterRange (syrk2Step uplo α A off ld j) 0 t
         (mapMat s off ld n j (j + 2) fun i c v => if uplo.contains i c then betaMul β v else v) =
@@ -317,7 +325,8 @@ private theorem toNat_syrkRest1 (lo1 hi0 : USize) (s0 : Bool) :
   unfold syrkRest1; split <;> rfl
 
 private theorem syrkRest0_le {lo0 lo1 hi0 : USize} (h₀ : lo0.toNat ≤ hi0.toNat)
-    (h₁ : lo1.toNat ≤ hi0.toNat) (s0 s1 : Bool) : (syrkRest0 lo0 lo1 hi0 s0 s1).toNat ≤ hi0.toNat := by
+    (h₁ : lo1.toNat ≤ hi0.toNat) (s0 s1 : Bool) :
+    (syrkRest0 lo0 lo1 hi0 s0 s1).toNat ≤ hi0.toNat := by
   rw [toNat_syrkRest0]; split <;> (try split) <;> lia
 
 private theorem syrkRest1_le {lo1 hi0 hi1 : USize} (h₀ : lo1.toNat ≤ hi1.toNat)
@@ -464,7 +473,8 @@ public theorem syrkCol2Data_eq (uplo : Uplo) (α : Float32) (A : Mat n k) (β : 
               (t.set! (C.off + C.ld * j + i) (t[C.off + C.ld * j + i]! +
                 α * A.data[A.off + A.ld * l.toNat + j]! * A.data[A.off + A.ld * l.toNat + i]!)).set!
                 (C.off + C.ld * (j + 1) + i) (t[C.off + C.ld * (j + 1) + i]! +
-                α * A.data[A.off + A.ld * l.toNat + (j + 1)]! * A.data[A.off + A.ld * l.toNat + i]!))
+                α * A.data[A.off + A.ld * l.toNat + (j + 1)]! *
+                  A.data[A.off + A.ld * l.toNat + i]!))
             (hF := fun _ _ => by simp)]
           · rw [Tail.run_forInFrom_modify
               (G := fun i v => v + α * A.data[A.off + A.ld * l.toNat + j]! *
@@ -474,7 +484,8 @@ public theorem syrkCol2Data_eq (uplo : Uplo) (α : Float32) (A : Mat n k) (β : 
               (he := fun i _ hi => by
                 have := syrkRest0_le (Nat.le_trans ho.1 ho.2.1) ho.2.1
                   (α == 0 || A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 j.toUSize l hj0 hl == 0)
-                  (α == 0 || A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 (j + 1).toUSize l hj1 hl == 0)
+                  (α == 0 ||
+                    A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 (j + 1).toUSize l hj1 hl == 0)
                 rw [C.toNat_col_index hs.2.1 (by lia) (by lia), hju]; simp [Stride.idx])]
             · rw [Tail.run_forInFrom_modify
                 (G := fun i v => v + α * A.data[A.off + A.ld * l.toNat + (j + 1)]! *
@@ -483,8 +494,10 @@ public theorem syrkCol2Data_eq (uplo : Uplo) (α : Float32) (A : Mat n k) (β : 
                 (idx := (Stride.mk (C.off + C.ld * (j + 1)) 1).idx)
                 (he := fun i _ hi => by
                   have := syrkRows_le (syrkRest1_le (Nat.le_trans ho.2.1 ho.2.2.1) ho.2.2.1
-                    (α == 0 || A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 j.toUSize l hj0 hl == 0))
-                    (α == 0 || A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 (j + 1).toUSize l hj1 hl == 0)
+                    (α == 0 ||
+                      A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 j.toUSize l hj0 hl == 0))
+                    (α == 0 ||
+                      A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 (j + 1).toUSize l hj1 hl == 0)
                   rw [C.toNat_col_index hs.2.1 (by lia) (by lia), hju1]; simp [Stride.idx])]
               · apply run_congr
                 simp only [Mat.uget_eq_getElem, Mat.getElem_def, hju, hju1, ← h₀, ← h₁,
@@ -494,22 +507,26 @@ public theorem syrkCol2Data_eq (uplo : Uplo) (α : Float32) (A : Mat n k) (β : 
                 rfl
               · intro i _ hi v
                 have := syrkRows_le (syrkRest1_le (Nat.le_trans ho.2.1 ho.2.2.1) ho.2.2.1
-                  (α == 0 || A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 j.toUSize l hj0 hl == 0))
-                  (α == 0 || A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 (j + 1).toUSize l hj1 hl == 0)
+                  (α == 0 ||
+                    A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 j.toUSize l hj0 hl == 0))
+                  (α == 0 ||
+                    A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 (j + 1).toUSize l hj1 hl == 0)
                 have hi' : i.toNat < n := by lia
                 simp only [Mat.uget_eq_getElem, Mat.getElem_def, hju1, ← h₁,
                   getElem!_pos A.data (A.off + A.ld * l.toNat + i.toNat) (A.index_lt hi' hl)]
             · intro i _ hi v
               have := syrkRest0_le (Nat.le_trans ho.1 ho.2.1) ho.2.1
                 (α == 0 || A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 j.toUSize l hj0 hl == 0)
-                (α == 0 || A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 (j + 1).toUSize l hj1 hl == 0)
+                (α == 0 ||
+                  A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 (j + 1).toUSize l hj1 hl == 0)
               have hi' : i.toNat < n := by lia
               simp only [Mat.uget_eq_getElem, Mat.getElem_def, hju, ← h₀,
                 getElem!_pos A.data (A.off + A.ld * l.toNat + i.toNat) (A.index_lt hi' hl)]
           · intro i _ hi next' t ht
             have := syrkRows_le ho.2.1
               (α == 0 || A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 j.toUSize l hj0 hl == 0 ||
-                (α == 0 || A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 (j + 1).toUSize l hj1 hl == 0))
+                (α == 0 ||
+                  A.uget A.off.toUSize A.ld.toUSize rfl rfl hs.1 (j + 1).toUSize l hj1 hl == 0))
             have hi' : i.toNat < n := by lia
             have p₀ := C.toNat_col_index hs.2.1 hi' hj0
             have p₁ := C.toNat_col_index hs.2.1 hi' hj1
@@ -517,8 +534,8 @@ public theorem syrkCol2Data_eq (uplo : Uplo) (α : Float32) (A : Mat n k) (β : 
             rw [hju1, Nat.one_mul] at p₁
             simp only [Tail.run_readThen, Tail.run_writeThen]
             apply run_congr
-            simp only [p₀, p₁, set_eq_set!, getElem_eq_getElem!, Mat.uget_eq_getElem, Mat.getElem_def,
-              hju, hju1]
+            simp only [p₀, p₁, set_eq_set!, getElem_eq_getElem!, Mat.uget_eq_getElem,
+              Mat.getElem_def, hju, hju1]
       · intro _ _ _ _; rfl
     · intro _ _ _ _; rfl
   · rfl
@@ -821,10 +838,12 @@ public theorem syrkTData_eq (uplo : Uplo) (α : Float32) (A : Mat k n) (β : Flo
       · intro i hlo hhi v
         have hle : (uplo.loU j).toNat ≤ i.toNat := hlo
         have hsp := syrkTSums_spec uplo A hs.1 hs.2.2.2 hs.2.2.1 _ hj
-        have hq : i.toNat - uplo.lo j.toNat < (syrkTSums uplo A hs.1 hs.2.2.2 hs.2.2.1 _ hj).size := by
+        have hq :
+            i.toNat - uplo.lo j.toNat < (syrkTSums uplo A hs.1 hs.2.2.2 hs.2.2.1 _ hj).size := by
           rw [hsp.1, ← uplo.toNat_loU, ← uplo.toNat_hiU hnu hj]; lia
         rw [USize.toNat_sub_of_le _ _ (USize.le_iff_toNat_le.mpr hle), uplo.toNat_loU,
-          getElem!_pos (syrkTSums uplo A hs.1 hs.2.2.2 hs.2.2.1 _ hj) _ hq, hsp.2, Nat.add_sub_cancel' (by rw [← uplo.toNat_loU]; exact hle)]
+          getElem!_pos (syrkTSums uplo A hs.1 hs.2.2.2 hs.2.2.1 _ hj) _ hq, hsp.2,
+          Nat.add_sub_cancel' (by rw [← uplo.toNat_loU]; exact hle)]
   · rfl
 
 /--
