@@ -2,11 +2,11 @@
 # Copyright © 2026 François G. Dorais. All rights reserved.
 # Released under Apache 2.0 license as described in the file LICENSE.
 """
-Generates the `Float32` routines and their tests from the `Float64` versions.
+Generates the `Float32` routines, their tests and their benchmarks from the `Float64` versions.
 
-`BLAS/Float64.lean`, `BLAS/Float64/`, `BLASTest/Float64.lean` and `BLASTest/Float64/` are the
-templates: make changes there, then run this script from anywhere to regenerate the `Float32`
-files, the root import lists and `.gitattributes`, which marks the generated files so that GitHub
+`Float64.lean` and `Float64/` in `BLAS`, `BLASTest` and `BLASBench` are the templates: make
+changes there, then run this script from anywhere to regenerate the `Float32` files, the root
+import lists and `.gitattributes`, which marks the generated files so that GitHub
 collapses them in diffs.
 
 Most of the translation is mechanical: `Float64` becomes `Float32`, `Float` becomes `Float32` and
@@ -26,7 +26,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # The directories and modules that are templates, relative to the repository root.
-LIBS = ['BLAS', 'BLASTest']
+LIBS = ['BLAS', 'BLASTest', 'BLASBench']
 
 # Precision-dependent text: each entry is the `Float64` text and its `Float32` translation, which
 # replaces it before the mechanical translation. An entry need not occur in the templates: the

@@ -41,8 +41,12 @@ jobs:
         continue-on-error: true
         run: |
           git worktree add "$RUNNER_TEMP/base" "$BASE"
-          cp BLASBench.lean "$RUNNER_TEMP/base/"
+          rm -rf "$RUNNER_TEMP/base/BLASBench"
+          cp -r BLASBench.lean BLASBench "$RUNNER_TEMP/base/"
           cd "$RUNNER_TEMP/base"
+          if ! grep -q '^name = "BLASBenchLib"' lakefile.toml; then
+            printf '\n[[lean_lib]]\nname = "BLASBenchLib"\nglobs = ["BLASBench.+"]\nmoreLeancArgs = ["-falign-loops=64"]\n' >> lakefile.toml
+          fi
           if ! grep -q '^name = "bench"' lakefile.toml; then
             printf '\n[[lean_exe]]\nname = "bench"\nroot = "BLASBench"\n' >> lakefile.toml
           fi

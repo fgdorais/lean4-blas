@@ -137,8 +137,10 @@ Against OpenBLAS on one thread, we don't expect any routine to be more than abou
 The Level 1 updates and the Level 2 routines run at about its speed, the reductions such as `dot`
 and `iamax` at about half its speed, since their specifications fix the order of their operations,
 and `gemm` is the furthest behind. OpenBLAS runs on several threads by default, and this
-library runs on one, so on a multi-core machine the gap is larger. `scripts/blas_compare.py`,
-below, measures both comparisons. [TODO.md](TODO.md) lists possible improvements.
+library runs on one, so on a multi-core machine the gap is larger. These figures are for `Float64`.
+On `Float32`, whose vectors hold twice as many elements, the reductions and `gemm` fall further
+behind OpenBLAS, to about 4 to 5 times slower. `scripts/blas_compare.py`, below, measures both
+comparisons. [TODO.md](TODO.md) lists possible improvements.
 
 ### Compiler options
 
@@ -173,14 +175,16 @@ The tests in `BLASTest` are `#guard` checks that run when the test library is bu
 `precompileModules`, so the checks call the compiled code of scalar-arrays rather than evaluating
 its Lean model.
 
-`lake exe bench [--tsv] [size] [rounds]` times the routines and compares each with a hand-written
-`USize` loop where there is one. `lake build` compiles it so that it keeps up with the API,
+`lake exe bench [--tsv] [--float32] [size] [rounds]` times the `Float64` routines, or the
+`Float32` ones with `--float32`, and compares each with a hand-written `USize` loop where there is
+one. `lake build` compiles it so that it keeps up with the API,
 but CI doesn't run it. To run it on GitHub, add the `benchmark` label to a pull request, which
 compares the pull request with its base, or start the Benchmarks workflow from the Actions tab.
 
-The `Float32` sources and tests, in `BLAS/Float32/` and `BLASTest/Float32/`, are generated from
-the `Float64` versions. Make changes in `BLAS/Float64/` and `BLASTest/Float64/`, then regenerate
-the `Float32` files:
+The `Float32` sources, tests and benchmarks, in `BLAS/Float32/`, `BLASTest/Float32/` and
+`BLASBench/Float32.lean`, are generated from the `Float64` versions. Make changes in
+`BLAS/Float64/`, `BLASTest/Float64/` and `BLASBench/Float64.lean`, then regenerate the `Float32`
+files:
 
 ```bash
 python3 scripts/generate.py
@@ -202,6 +206,9 @@ lake exe bench --tsv > lean.tsv
 OPENBLAS_NUM_THREADS=1 ./cblas_bench /usr/lib/x86_64-linux-gnu/libopenblas.so.0 > openblas.tsv
 python3 scripts/blas_compare.py lean.tsv OpenBLAS=openblas.tsv
 ```
+
+For `Float32`, compile `scripts/cblas_bench.c` with `-DSINGLE`, which times `sdot`, `sgemm` and
+the other single-precision routines, and run `lake exe bench --tsv --float32`.
 
 This is only a script: the library itself has no C dependency.
 
