@@ -360,6 +360,69 @@ public theorem modifyAt_col_mapMat_lo (a : Float64Array) (off ld : Nat) (hml : m
       · rw [ite_eq_right (by lia), ite_eq_right (by lia)]
     · rw [ite_eq_right (by lia), ite_eq_right (by lia)]
 
+/--
+Mapping the rows `r₀` to `r₁ - 1` of a column `c` of a `mapMat`, as a stride of `1`, maps them in
+its function.
+-/
+public theorem modifyAt_col_mapMat_mid (a : Float64Array) (off ld : Nat) (hml : m ≤ ld)
+    {lo hi c : Nat} (hc : lo ≤ c ∧ c < hi) {r₀ r₁ : Nat} (hr : r₁ ≤ m)
+    (g : Nat → Nat → Float → Float) (G : Nat → Float → Float) :
+    (mapMat a off ld m lo hi g).modifyAt (Stride.mk (off + ld * c) 1).idx r₀ r₁ G =
+      mapMat a off ld m lo hi fun i j v =>
+        if j = c ∧ r₀ ≤ i ∧ i < r₁ then G i (g i j v) else g i j v := by
+  have hinj : ∀ i, r₀ ≤ i → i < r₁ → ∀ i', r₀ ≤ i' → i' < r₁ →
+      (Stride.mk (off + ld * c) 1).idx i = (Stride.mk (off + ld * c) 1).idx i' → i = i' :=
+    fun i _ _ i' _ _ e => by simp only [Stride.idx] at e; lia
+  apply ext_getElem (by simp)
+  intro p h₁ h₂
+  simp only [size_mapMat] at h₂
+  by_cases hw : ∃ i, r₀ ≤ i ∧ i < r₁ ∧ p = off + ld * c + i
+  · obtain ⟨i, hi₀, hi₁, rfl⟩ := hw
+    have e : ∀ (b : Float64Array) (h : off + ld * c + i < b.size),
+        b[off + ld * c + i] = b[(Stride.mk (off + ld * c) 1).idx i]'(by
+          simp only [Stride.idx, Nat.one_mul]; exact h) := by
+      intro b h; simp only [Stride.idx, Nat.one_mul]
+    rw [e _ h₁, getElem_modifyAt_idx _ _ _ hinj hi₀ hi₁,
+      getElem_mapMat_index _ _ _ _ _ _ _ (by lia) hml hc h₂]
+    simp only [Stride.idx, Nat.one_mul]
+    rw [getElem_mapMat_index _ _ _ _ _ _ _ (by lia) hml hc h₂, ite_eq_left (by simp [hi₀, hi₁])]
+  · have hne : ∀ i, r₀ ≤ i → i < r₁ → (Stride.mk (off + ld * c) 1).idx i ≠ p :=
+      fun i hi₀ hi₁ e => hw ⟨i, hi₀, hi₁, by simp only [Stride.idx] at e; lia⟩
+    rw [getElem_modifyAt_of_forall_ne _ _ _ hne]
+    simp only [mapMat, Float64Array.getElem_ofFn]
+    by_cases hc' : off ≤ p ∧ (p - off) % ld < m ∧ lo ≤ (p - off) / ld ∧ (p - off) / ld < hi
+    · rw [ite_eq_left hc', ite_eq_left hc', ite_eq_right]
+      rintro ⟨hj, hr₀, hr₁⟩
+      exact hw ⟨_, hr₀, hr₁, by rw [← hj]; exact eq_mat_index hc'.1⟩
+    · rw [ite_eq_right hc', ite_eq_right hc']
+
+/-- Two `mapMat` of the same columns are one, by the composition of their functions. -/
+public theorem mapMat_mapMat (a : Float64Array) (off ld m lo hi : Nat)
+    (g f : Nat → Nat → Float → Float) :
+    mapMat (mapMat a off ld m lo hi g) off ld m lo hi f =
+      mapMat a off ld m lo hi fun i j v => f i j (g i j v) := by
+  apply ext_getElem (by simp)
+  intro p _ _
+  simp only [mapMat, Float64Array.getElem_ofFn]
+  split <;> rfl
+
+/-- A `mapMat` of the columns `mid` to `hi - 1` after one of the columns `lo` to `mid - 1`. -/
+public theorem mapMat_mapMat_adj (a : Float64Array) (off ld : Nat) {lo mid hi : Nat}
+    (h₁ : lo ≤ mid) (h₂ : mid ≤ hi) (g : Nat → Nat → Float → Float) :
+    mapMat (mapMat a off ld m lo mid g) off ld m mid hi g = mapMat a off ld m lo hi g := by
+  apply ext_getElem (by simp)
+  intro p hp _
+  simp only [mapMat, Float64Array.getElem_ofFn]
+  by_cases hc : off ≤ p ∧ (p - off) % ld < m
+  · by_cases hm : mid ≤ (p - off) / ld ∧ (p - off) / ld < hi
+    · rw [ite_eq_left ⟨hc.1, hc.2, hm⟩, ite_eq_right (by lia),
+        ite_eq_left ⟨hc.1, hc.2, by lia, hm.2⟩]
+    · rw [ite_eq_right (by lia)]
+      by_cases hl : lo ≤ (p - off) / ld ∧ (p - off) / ld < mid
+      · rw [ite_eq_left ⟨hc.1, hc.2, hl⟩, ite_eq_left ⟨hc.1, hc.2, hl.1, by lia⟩]
+      · rw [ite_eq_right (by lia), ite_eq_right (by lia)]
+  · rw [ite_eq_right (by lia), ite_eq_right (by lia), ite_eq_right (by lia)]
+
 /-- Steps that each map column `j` of a matrix, as a stride of `1`, map the whole matrix. -/
 public theorem iterRange_cols (a : Float64Array) (off ld : Nat) (hml : m ≤ ld) (n : Nat)
     (G : Nat → Nat → Float → Float) :
