@@ -9,3 +9,4 @@ import BLASTest.Float32.Level2
 import BLASTest.Float32.Level3
 import BLASTest.Float32.DSL
 import BLASTest.Float32.Band
+import BLASTest.Float32.Packed

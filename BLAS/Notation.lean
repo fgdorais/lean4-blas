@@ -54,11 +54,14 @@ triangle `T` is a view such as `A.lower` or `A.unitUpper`, or its transpose `A.l
 inverse is `A.lower⁻¹` or `A.lowerᵀ⁻¹`. The band views select the band routines: `A.band m kl ku`
 and its transpose are `gbmv` and `gbmvT`, `A.symUpperBand` and `A.symLowerBand` are `sbmv`, and a
 triangular band `A.upperBand`, `A.unitLowerBand`, … is `tbmv` or `tbsv`, or `tbmvT` or `tbsvT` for
-its transpose (`BLAS.Float64.BandView`). A missing `α` is `1`, a missing `β • y` is `β = 0`, which
-sets `y` to `0` without reading it, as in the reference BLAS, and a bare `y` is `β = 1`. The
-summands may come in any order, and a subtracted summand `- α • …` has the scalar `-α` (`-1` if it
-has none). Floating-point negation is exact, and `a - b` is `a + (-b)`, so `y := A * x - y` is
-`gemv 1 A x (-1) y` and `y -= α • x` is `axpy (-α) x y`, to the bit.
+its transpose (`BLAS.Float64.BandView`). The packed views of a vector `ap` select the packed
+routines: `ap.symUpperPacked` and `ap.symLowerPacked` are `spmv`, and `spr` or `spr2` as a target,
+and a packed triangle `ap.upperPacked`, `ap.unitLowerPacked`, … is `tpmv` or `tpsv`, or `tpmvT` or
+`tpsvT` for its transpose (`BLAS.Float64.PackedView`). A missing `α` is `1`, a missing `β • y`
+is `β = 0`, which sets `y` to `0` without reading it, as in the reference BLAS, and a bare `y` is
+`β = 1`. The summands may come in any order, and a subtracted summand `- α • …` has the scalar `-α`
+(`-1` if it has none). Floating-point negation is exact, and `a - b` is `a + (-b)`, so
+`y := A * x - y` is `gemv 1 A x (-1) y` and `y -= α • x` is `axpy (-α) x y`, to the bit.
 
 A product over one of its operands, `x := T * x`, is a triangular product in place: `trmv` and
 `trmm` have no `β`, and `trmv` no `α`. For a general matrix, `x := A * x` is an error, as `gemv`

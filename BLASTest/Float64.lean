@@ -9,3 +9,4 @@ import BLASTest.Float64.Level2
 import BLASTest.Float64.Level3
 import BLASTest.Float64.DSL
 import BLASTest.Float64.Band
+import BLASTest.Float64.Packed

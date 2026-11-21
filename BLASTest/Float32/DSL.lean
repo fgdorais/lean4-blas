@@ -153,6 +153,28 @@ example (A : Mat (k + 1) n) (x : Vec n) :
 example (A : Mat (k + 1) n) (x : Vec n) :
     blas%(x := A.unitLowerBandᵀ⁻¹ * x) = Mat.tbsvT .lower .unit A x := by simp
 
+-- A packed view is `spmv`, `tpmv`, `tpmvT`, `tpsv` or `tpsvT`, and a target `spr` or `spr2`.
+example (ap : Vec (n * (n + 1) / 2)) (x y : Vec n) :
+    blas%(y := α • ap.symLowerPacked * x + β • y) = Mat.spmv .lower α ap x β y := by simp
+
+example (ap : Vec (n * (n + 1) / 2)) (x : Vec n) :
+    blas%(x := ap.upperPacked * x) = Mat.tpmv .upper .nonUnit ap x := by simp
+
+example (ap : Vec (n * (n + 1) / 2)) (x : Vec n) :
+    blas%(x := ap.unitLowerPackedᵀ * x) = Mat.tpmvT .lower .unit ap x := by simp
+
+example (ap : Vec (n * (n + 1) / 2)) (x : Vec n) :
+    blas%(x := ap.lowerPacked⁻¹ * x) = Mat.tpsv .lower .nonUnit ap x := by simp
+
+example (ap : Vec (n * (n + 1) / 2)) (x : Vec n) :
+    blas%(x := ap.unitUpperPackedᵀ⁻¹ * x) = Mat.tpsvT .upper .unit ap x := by simp
+
+example (x : Vec n) (ap : Vec (n * (n + 1) / 2)) :
+    blas%(ap.symUpperPacked += α • x * xᵀ) = Mat.spr .upper α x ap := by simp
+
+example (x y : Vec n) (ap : Vec (n * (n + 1) / 2)) :
+    blas%(ap.symLowerPacked += α • x * yᵀ + α • y * xᵀ) = Mat.spr2 .lower α x y ap := by simp
+
 -- A rank-one update is `ger`.
 example (x : Vec m) (y : Vec n) (A : Mat m n) : blas%(A += α • x * yᵀ) = Mat.ger α x y A := by
   simp

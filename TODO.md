@@ -92,6 +92,9 @@ Changes that would reorder them, such as partial sums in `dot`, `asum` and `nrm2
   benchmarked yet, against `scripts/cblas_bench.c` or otherwise. They run the loops of the reference
   BLAS one column at a time; `gbmv` and `sbmv` could take two or four columns per pass, as `gemv`
   does, with each element's terms in their order.
+- [ ] The packed routines `spmv`, `spr`, `spr2`, `tpmv`, `tpmvT`, `tpsv` and `tpsvT` are not
+  benchmarked yet either. They run the loops of the reference BLAS one column at a time, with the
+  packed index computed per element; `spmv` could take two columns per pass, as `symv` does.
 - [ ] `gemvT` at 256 is 1.8× behind, and 4.5× in `Float32`, against 1.0–1.1× (1.6–1.7× in
   `Float32`) at 1024 and 2048. Not investigated yet.
 

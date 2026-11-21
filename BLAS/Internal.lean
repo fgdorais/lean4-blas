@@ -480,4 +480,292 @@ private theorem toNat_bandBelow_sub {n k : Nat} (hn : n < USize.size) {j t : USi
   · rw [USize.toNat_sub_of_le _ _ (by rw [USize.le_iff_toNat_le]; lia), hb]
   · lia
 
+/-! ## Packed triangles -/
+
+private theorem tri_succ (j : Nat) : (j + 1) * (j + 1 + 1) / 2 = j * (j + 1) / 2 + (j + 1) := by
+  rw [show (j + 1) * (j + 1 + 1) = j * (j + 1) + (j + 1) * 2 by grind,
+    Nat.add_mul_div_right _ _ (by decide)]
+
+private theorem tri_mono {j n : Nat} (h : j ≤ n) : j * (j + 1) / 2 ≤ n * (n + 1) / 2 :=
+  Nat.div_le_div_right (Nat.mul_le_mul h (Nat.succ_le_succ h))
+
+private theorem le_tri (m : Nat) : m ≤ m * (m + 1) / 2 := by
+  cases m with
+  | zero => simp
+  | succ m => rw [tri_succ]; lia
+
+/-- The element `i ≤ j` of column `j` of a packed upper triangle is inside it. -/
+private theorem tri_upper_lt {i j n : Nat} (hij : i ≤ j) (hj : j < n) :
+    j * (j + 1) / 2 + i < n * (n + 1) / 2 := by
+  have := tri_mono (Nat.succ_le_of_lt hj)
+  rw [tri_succ] at this
+  lia
+
+/-- The element `i ≥ j` of column `j` of a packed lower triangle is inside it. -/
+private theorem tri_lower_lt {i j n : Nat} (hji : j ≤ i) (hi : i < n) :
+    n * (n + 1) / 2 - (n - j) * (n - j + 1) / 2 + (i - j) < n * (n + 1) / 2 := by
+  have h₁ := tri_mono (show n - j ≤ n by lia)
+  obtain ⟨m, hm⟩ : ∃ m, n - j = m + 1 := ⟨n - j - 1, by lia⟩
+  rw [hm, tri_succ] at h₁ ⊢
+  lia
+
+/-- The start of column `j` of a packed upper triangle, `j * (j + 1) / 2`, as a `USize`. -/
+@[noinline] public def packedUp (j : USize) : USize := (j.toNat * (j.toNat + 1) / 2).toUSize
+
+/--
+The start of column `j` of a packed lower triangle of order `n`,
+`n * (n + 1) / 2 - (n - j) * (n - j + 1) / 2`, as a `USize`.
+-/
+@[noinline] public def packedLo (n : Nat) (j : USize) : USize :=
+  (n * (n + 1) / 2 - (n - j.toNat) * (n - j.toNat + 1) / 2).toUSize
+
+private theorem toNat_packedUp_add {n : Nat} (hn : n * (n + 1) / 2 < USize.size) {j l : USize}
+    (hj : j.toNat < n) (hl : l.toNat ≤ j.toNat) :
+    (packedUp j + l).toNat = j.toNat * (j.toNat + 1) / 2 + l.toNat ∧
+      j.toNat * (j.toNat + 1) / 2 + l.toNat < n * (n + 1) / 2 := by
+  have hlt := tri_upper_lt hl hj
+  have hp : (packedUp j).toNat = j.toNat * (j.toNat + 1) / 2 := by
+    unfold packedUp; rw [USize.toNat_ofNat_of_lt' (by lia)]
+  refine ⟨?_, hlt⟩
+  rw [USize.toNat_add, hp, Nat.mod_eq_of_lt (by lia)]
+
+private theorem toNat_packedLo_add {n : Nat} (hn : n * (n + 1) / 2 < USize.size) {j l : USize}
+    (hj : j.toNat < n) (hl : l.toNat < n - j.toNat) :
+    (packedLo n j + l).toNat =
+        n * (n + 1) / 2 - (n - j.toNat) * (n - j.toNat + 1) / 2 + l.toNat ∧
+      n * (n + 1) / 2 - (n - j.toNat) * (n - j.toNat + 1) / 2 + l.toNat < n * (n + 1) / 2 := by
+  have hlt := tri_lower_lt (i := j.toNat + l.toNat) (j := j.toNat) (n := n)
+    (Nat.le_add_right _ _) (by lia)
+  rw [show j.toNat + l.toNat - j.toNat = l.toNat by lia] at hlt
+  have hp : (packedLo n j).toNat = n * (n + 1) / 2 - (n - j.toNat) * (n - j.toNat + 1) / 2 := by
+    unfold packedLo; rw [USize.toNat_ofNat_of_lt' (by lia)]
+  refine ⟨?_, hlt⟩
+  rw [USize.toNat_add, hp, Nat.mod_eq_of_lt (by lia)]
+
+private theorem toNat_packedLo {n : Nat} (hn : n * (n + 1) / 2 < USize.size) {j : USize}
+    (hj : j.toNat < n) :
+    (packedLo n j).toNat = n * (n + 1) / 2 - (n - j.toNat) * (n - j.toNat + 1) / 2 ∧
+      n * (n + 1) / 2 - (n - j.toNat) * (n - j.toNat + 1) / 2 < n * (n + 1) / 2 := by
+  have h := toNat_packedLo_add hn hj (l := 0) (by simp only [USize.toNat_zero]; lia)
+  simpa using h
+
+/-- The element `j + 1 + l` of column `j` of a packed lower triangle, below the diagonal. -/
+private theorem toNat_packedLo_below {n : Nat} (hn : n * (n + 1) / 2 < USize.size)
+    (hn' : n < USize.size) {j l : USize} (hj : j.toNat < n)
+    (hl : l.toNat < (bandBelow n n j).toNat) :
+    (packedLo n j + (1 + l)).toNat =
+        n * (n + 1) / 2 - (n - j.toNat) * (n - j.toNat + 1) / 2 + (1 + l).toNat ∧
+      n * (n + 1) / 2 - (n - j.toNat) * (n - j.toNat + 1) / 2 + (1 + l).toNat <
+        n * (n + 1) / 2 := by
+  have h := toNat_bandBelow_add hn' hj hl
+  have h' := toNat_one_add_bandBelow (k := n) hn' hl
+  exact toNat_packedLo_add hn hj (by lia)
+
+/-- The row `n - 1 - t` below the diagonal of column `n - 1 - kk`, counted from the bottom. -/
+private theorem toNat_rev_bandBelow_sub {n : Nat} (hn : n < USize.size) {kk t : USize}
+    (hkk : kk.toNat < n) (ht : t.toNat < (bandBelow n n (n.toUSize - 1 - kk)).toNat) :
+    (n.toUSize - 1 - kk + bandBelow n n (n.toUSize - 1 - kk) - t).toNat = n - 1 - t.toNat ∧
+      n - 1 - t.toNat < n := by
+  have hj : (n.toUSize - 1 - kk).toNat = n - 1 - kk.toNat := by grind
+  have h := toNat_add_bandBelow_sub hn (j := n.toUSize - 1 - kk) (by lia) ht
+  have hb := toNat_bandBelow hn n (n.toUSize - 1 - kk)
+  rw [hb, hj] at ht
+  rw [hj] at h
+  constructor
+  · rw [h.1]; lia
+  · lia
+
+/-- The element `n - 1 - t` of column `n - 1 - kk` of a packed lower triangle, from the bottom. -/
+private theorem toNat_packedLo_rev_sub {n : Nat} (hn : n * (n + 1) / 2 < USize.size)
+    (hn' : n < USize.size) {kk t : USize} (hkk : kk.toNat < n)
+    (ht : t.toNat < (bandBelow n n (n.toUSize - 1 - kk)).toNat) :
+    (packedLo n (n.toUSize - 1 - kk) + (bandBelow n n (n.toUSize - 1 - kk) - t)).toNat =
+        n * (n + 1) / 2 - (n - (n - 1 - kk.toNat)) * (n - (n - 1 - kk.toNat) + 1) / 2 +
+          (n - 1 - t.toNat - (n - 1 - kk.toNat)) ∧
+      n * (n + 1) / 2 - (n - (n - 1 - kk.toNat)) * (n - (n - 1 - kk.toNat) + 1) / 2 +
+          (n - 1 - t.toNat - (n - 1 - kk.toNat)) < n * (n + 1) / 2 := by
+  have hj : (n.toUSize - 1 - kk).toNat = n - 1 - kk.toNat := by grind
+  have h := toNat_bandBelow_sub (k := n) hn' ht
+  have hb := toNat_bandBelow hn' n (n.toUSize - 1 - kk)
+  rw [hb, hj] at ht
+  rw [hj] at h
+  have h' := toNat_packedLo_add hn (j := n.toUSize - 1 - kk)
+    (l := bandBelow n n (n.toUSize - 1 - kk) - t) (by lia) (by rw [h.1, hj]; lia)
+  rw [hj, h.1] at h'
+  rw [show n - 1 - t.toNat - (n - 1 - kk.toNat) = min (n - 1 - (n - 1 - kk.toNat)) n - t.toNat by
+    lia]
+  exact h'
+
+/-- A packed upper triangle's element `p` is in at most one column. -/
+private theorem packedUp_col_unique {j j' p : Nat} (hp : j * (j + 1) / 2 ≤ p)
+    (hp' : p < j * (j + 1) / 2 + (j + 1)) (hq : j' * (j' + 1) / 2 ≤ p)
+    (hq' : p < j' * (j' + 1) / 2 + (j' + 1)) : j' = j := by
+  rcases Nat.lt_trichotomy j' j with h | h | h
+  · have := tri_mono (Nat.succ_le_of_lt h)
+    rw [tri_succ] at this
+    lia
+  · exact h
+  · have := tri_mono (Nat.succ_le_of_lt h)
+    rw [tri_succ] at this
+    lia
+
+/-- A packed lower triangle's element `p` is in at most one column. -/
+private theorem packedLo_col_unique {n j j' p : Nat} (hj : j < n) (hj' : j' < n)
+    (hp : n * (n + 1) / 2 - (n - j) * (n - j + 1) / 2 ≤ p)
+    (hp' : p < n * (n + 1) / 2 - (n - j) * (n - j + 1) / 2 + (n - j))
+    (hq : n * (n + 1) / 2 - (n - j') * (n - j' + 1) / 2 ≤ p)
+    (hq' : p < n * (n + 1) / 2 - (n - j') * (n - j' + 1) / 2 + (n - j')) : j' = j := by
+  have ht : ∀ m, m < n → (n - m) * (n - m + 1) / 2 = (n - m - 1) * (n - m) / 2 + (n - m) :=
+    fun m hm => by
+      have := tri_succ (n - m - 1)
+      rw [show n - m - 1 + 1 = n - m by lia] at this
+      exact this
+  have hle : ∀ m, m ≤ n → (n - m) * (n - m + 1) / 2 ≤ n * (n + 1) / 2 :=
+    fun m _ => tri_mono (Nat.sub_le n m)
+  rcases Nat.lt_trichotomy j' j with h | h | h
+  · have := tri_mono (show n - j ≤ n - j' - 1 by lia)
+    rw [show n - j' - 1 + 1 = n - j' by lia] at this
+    have := ht j' hj'
+    have := hle j (Nat.le_of_lt hj)
+    have := hle j' (Nat.le_of_lt hj')
+    lia
+  · exact h
+  · have := tri_mono (show n - j' ≤ n - j - 1 by lia)
+    rw [show n - j - 1 + 1 = n - j by lia] at this
+    have := ht j hj
+    have := hle j (Nat.le_of_lt hj)
+    have := hle j' (Nat.le_of_lt hj')
+    lia
+
+/-- A fold whose steps other than `j` do nothing is step `j`. -/
+private theorem fold_single {α : Type _} {n j : Nat} (hj : j < n) (f : Nat → α → α)
+    (hf : ∀ j', j' < n → j' ≠ j → ∀ v, f j' v = v) (v : α) :
+    Nat.fold n (fun j' _ s => f j' s) v = f j v := by
+  rw [show (fun j' (_ : j' < n) s => f j' s) =
+      fun j' _ s => if j ≤ j' ∧ j' < j + 1 then f j' s else s from by
+    funext j' h s
+    split
+    · rfl
+    · exact hf j' h (by lia) s, fold_ite_range,
+    Nat.fold_congr (show min n (j + 1) - j = 0 + 1 by lia), Nat.fold_succ, Nat.fold_zero,
+    Nat.add_zero]
+
+/-! ### Sweeps over a triangle -/
+
+/-- `fold_upper_band` for a full upper triangle. -/
+private theorem fold_upper_tri {α : Type _} {n i : Nat} (hi : i < n) (D : Nat → α → α)
+    (T : Nat → α → α) (v : α) :
+    Nat.fold n (fun j _ s => if i = j then D j s else if i < j then T j s else s) v =
+      Nat.fold (n - 1 - i) (fun t _ s => T (i + 1 + t) s) (D i v) := by
+  rw [show (fun j (_ : j < n) s => if i = j then D j s else if i < j then T j s else s) =
+      fun j _ s => if i = j then D j s
+        else if j - min j n ≤ i ∧ i < j - min j n + min j n then T j s else s from by
+    funext j hj s
+    rw [show min j n = j by lia, Nat.sub_self, Nat.zero_add]
+    simp only [Nat.zero_le, true_and],
+    fold_upper_band hi n D T v, Nat.fold_congr (show min (n - 1 - i) n = n - 1 - i by lia)]
+
+/-- `fold_lower_band` for a full lower triangle. -/
+private theorem fold_lower_tri {α : Type _} {n i : Nat} (hi : i < n) (D : Nat → α → α)
+    (T : Nat → α → α) (v : α) :
+    Nat.fold n (fun j _ s => if i = j then D j s else if j < i then T j s else s) v =
+      D i (Nat.fold i (fun t _ s => T t s) v) := by
+  rw [show (fun j (_ : j < n) s => if i = j then D j s else if j < i then T j s else s) =
+      fun j _ s => if i = j then D j s
+        else if j + 1 ≤ i ∧ i < j + 1 + min (n - 1 - j) n then T j s else s from by
+    funext j hj s
+    by_cases h₀ : i = j
+    · rw [ite_eq_left_of_eq_true _ _ (eq_true h₀), ite_eq_left_of_eq_true _ _ (eq_true h₀)]
+    rw [ite_eq_right_of_eq_false _ _ (eq_false h₀), ite_eq_right_of_eq_false _ _ (eq_false h₀)]
+    by_cases h : j < i
+    · rw [ite_eq_left_of_eq_true _ _ (eq_true h), ite_eq_left_of_eq_true _ _ (eq_true (by lia))]
+    · rw [ite_eq_right_of_eq_false _ _ (eq_false h),
+        ite_eq_right_of_eq_false _ _ (eq_false (by lia))],
+    fold_lower_band hi n D T v, Nat.fold_congr (show min i n = i by lia)]
+  congr 2
+  funext t ht s
+  rw [show i - min i n + t = t by lia]
+
+/-- `fold_lower_band_rev` for a full lower triangle. -/
+private theorem fold_lower_tri_rev {α : Type _} {n i : Nat} (hi : i < n) (D : Nat → α → α)
+    (T : Nat → α → α) (v : α) :
+    Nat.fold n (fun kk _ s =>
+        if i = n - 1 - kk then D (n - 1 - kk) s else if n - 1 - kk < i then T (n - 1 - kk) s
+        else s) v =
+      Nat.fold i (fun t _ s => T (i - 1 - t) s) (D i v) := by
+  rw [show (fun kk (_ : kk < n) s =>
+        if i = n - 1 - kk then D (n - 1 - kk) s else if n - 1 - kk < i then T (n - 1 - kk) s
+        else s) =
+      fun kk _ s => if i = n - 1 - kk then D (n - 1 - kk) s
+        else if n - 1 - kk + 1 ≤ i ∧ i < n - 1 - kk + 1 + min (n - 1 - (n - 1 - kk)) n then
+          T (n - 1 - kk) s
+        else s from by
+    funext kk hkk s
+    by_cases h₀ : i = n - 1 - kk
+    · rw [ite_eq_left_of_eq_true _ _ (eq_true h₀), ite_eq_left_of_eq_true _ _ (eq_true h₀)]
+    rw [ite_eq_right_of_eq_false _ _ (eq_false h₀), ite_eq_right_of_eq_false _ _ (eq_false h₀)]
+    by_cases h : n - 1 - kk < i
+    · rw [ite_eq_left_of_eq_true _ _ (eq_true h), ite_eq_left_of_eq_true _ _ (eq_true (by lia))]
+    · rw [ite_eq_right_of_eq_false _ _ (eq_false h),
+        ite_eq_right_of_eq_false _ _ (eq_false (by lia))],
+    fold_lower_band_rev hi n D T v, Nat.fold_congr (show min i n = i by lia)]
+
+/-- `fold_upper_band_rev` for a full upper triangle. -/
+private theorem fold_upper_tri_rev {α : Type _} {n i : Nat} (hi : i < n) (D : Nat → α → α)
+    (T : Nat → α → α) (v : α) :
+    Nat.fold n (fun kk _ s =>
+        if i = n - 1 - kk then D (n - 1 - kk) s else if i < n - 1 - kk then T (n - 1 - kk) s
+        else s) v =
+      D i (Nat.fold (n - 1 - i) (fun t _ s => T (n - 1 - t) s) v) := by
+  rw [show (fun kk (_ : kk < n) s =>
+        if i = n - 1 - kk then D (n - 1 - kk) s else if i < n - 1 - kk then T (n - 1 - kk) s
+        else s) =
+      fun kk _ s => if i = n - 1 - kk then D (n - 1 - kk) s
+        else if n - 1 - kk - min (n - 1 - kk) n ≤ i ∧
+            i < n - 1 - kk - min (n - 1 - kk) n + min (n - 1 - kk) n then
+          T (n - 1 - kk) s
+        else s from by
+    funext kk hkk s
+    by_cases h₀ : i = n - 1 - kk
+    · rw [ite_eq_left_of_eq_true _ _ (eq_true h₀), ite_eq_left_of_eq_true _ _ (eq_true h₀)]
+    rw [ite_eq_right_of_eq_false _ _ (eq_false h₀), ite_eq_right_of_eq_false _ _ (eq_false h₀)]
+    by_cases h : i < n - 1 - kk
+    · rw [ite_eq_left_of_eq_true _ _ (eq_true h), ite_eq_left_of_eq_true _ _ (eq_true (by lia))]
+    · rw [ite_eq_right_of_eq_false _ _ (eq_false h),
+        ite_eq_right_of_eq_false _ _ (eq_false (by lia))],
+    fold_upper_band_rev hi n D T v, Nat.fold_congr (show min (n - 1 - i) n = n - 1 - i by lia)]
+  congr 2
+  funext t ht s
+  rw [show i + min (n - 1 - i) n - t = n - 1 - t by lia]
+
+/-- `fold_lower_band_pre` for a full lower triangle. -/
+private theorem fold_lower_tri_pre {α : Type _} {i : Nat} (D : Nat → α → α)
+    (T : Nat → α → α) (v : α) :
+    Nat.fold i (fun j _ s => if i = j then D j s else if j < i then T j s else s) v =
+      Nat.fold i (fun t _ s => T t s) v := by
+  congr 1
+  funext j hj s
+  rw [ite_eq_right_of_eq_false _ _ (eq_false (by lia)), ite_eq_left_of_eq_true _ _ (eq_true hj)]
+
+/-- `fold_upper_band_rev_pre` for a full upper triangle. -/
+private theorem fold_upper_tri_rev_pre {α : Type _} {n i : Nat} (hi : i < n) (D : Nat → α → α)
+    (T : Nat → α → α) (v : α) :
+    Nat.fold (n - 1 - i) (fun kk _ s =>
+        if i = n - 1 - kk then D (n - 1 - kk) s else if i < n - 1 - kk then T (n - 1 - kk) s
+        else s) v =
+      Nat.fold (n - 1 - i) (fun t _ s => T (n - 1 - t) s) v := by
+  congr 1
+  funext kk hkk s
+  rw [ite_eq_right_of_eq_false _ _ (eq_false (by lia)),
+    ite_eq_left_of_eq_true _ _ (eq_true (by lia))]
+
+/-- The row `n - 1 - kk + 1 + l` below the diagonal of column `n - 1 - kk`, for `l < kk`. -/
+private theorem toNat_rev_succ_add {n : Nat} (hn : n < USize.size) {kk l : USize}
+    (hkk : kk.toNat < n) (hl : l.toNat < kk.toNat) :
+    (n.toUSize - 1 - kk + 1 + l).toNat = n - 1 - kk.toNat + 1 + l.toNat ∧
+      n - 1 - kk.toNat + 1 + l.toNat < n := by
+  constructor
+  · grind
+  · lia
+
 end BLAS

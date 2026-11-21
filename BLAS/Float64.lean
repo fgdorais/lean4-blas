@@ -32,8 +32,14 @@ public import BLAS.Float64.Gbmv
 public import BLAS.Float64.Sbmv
 public import BLAS.Float64.Tbmv
 public import BLAS.Float64.Tbsv
+public import BLAS.Float64.Packed
+public import BLAS.Float64.Tpmv
+public import BLAS.Float64.Tpsv
+public import BLAS.Float64.Spmv
+public import BLAS.Float64.Spr
 public import BLAS.Float64.View
 public import BLAS.Float64.BandView
+public import BLAS.Float64.PackedView
 
 /-!
 # BLAS on `Float`

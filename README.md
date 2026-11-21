@@ -8,7 +8,8 @@ The routines come with proved specifications; their speed is measured, not promi
 
 It has, on `Float64` and `Float32`, the BLAS Level 1 routines on strided vectors, `gemv`, `ger`,
 `symv`, `syr`, `syr2` and `trsv`, `trmv` (with their transposed forms), the band routines `gbmv`,
-`sbmv`, `tbmv` and `tbsv` (with theirs), and `gemm`, `syrk`, `syr2k`,
+`sbmv`, `tbmv` and `tbsv` (with theirs), the packed routines `spmv`, `spr`, `spr2`, `tpmv` and
+`tpsv` (with theirs), and `gemm`, `syrk`, `syr2k`,
 `trsm` and `trmm` (with theirs) and `symm` on matrices with an offset and a leading dimension, as
 well as the mixed-precision `dsdot` and `sdsdot`. The `Float32` routines are in `BLAS.Float32`, with
 the same names and specifications as those of `BLAS.Float64`, on `Float32Array`.
@@ -202,6 +203,28 @@ y[i] = d.apply (Nat.fold (min i k) (fun t _ s =>
 `blas%` selects them from the views `A.band m kl ku`, `A.upperBand`, `A.unitLowerBand`, …, and
 `A.symUpperBand`, `A.symLowerBand`, as it does `gemv`, `trmv`, `trsv` and `symv` from `A`,
 `A.upper`, … and `A.symUpper`.
+
+The packed routines take a triangle of an `n × n` matrix packed by columns, as in the reference
+BLAS, in a vector `ap : Vec (n * (n + 1) / 2)`, which may have an offset and a stride: the element
+`i ≤ j` of the upper triangle is `ap[upIdx j i]`, with `upIdx j i = j * (j + 1) / 2 + i`, and the
+element `i ≥ j` of the lower triangle is `ap[loIdx n j i]`. They run the loops of the reference
+`dspmv`, `dspr`, `dspr2`, `dtpmv` and `dtpsv` in their order, and their specifications are those of
+`symv`, `syr`, `syr2`, `trmv` and `trsv` on the packed elements:
+
+| Routine | Result | Specification |
+|---|---|---|
+| `spmv uplo α ap x β y` | `α * A * x + β * y` for a symmetric packed `A`, over `y` | `getElem_spmv_upper`, `getElem_spmv_lower` |
+| `spr uplo α x ap` | `α * x * xᵀ + A` for a symmetric packed `A`, over `ap` | `getElem_spr_upper`, `getElem_spr_lower` |
+| `spr2 uplo α x y ap` | `α * x * yᵀ + α * y * xᵀ + A` for a symmetric packed `A`, over `ap` | `getElem_spr2_upper`, `getElem_spr2_lower` |
+| `tpmv uplo diag ap x` | `A * x` for a triangular packed `A`, over `x` | `getElem_tpmv_upper`, `getElem_tpmv_lower` |
+| `tpmvT uplo diag ap x` | `Aᵀ * x` for a triangular packed `A`, over `x` | `getElem_tpmvT_upper`, `getElem_tpmvT_lower` |
+| `tpsv uplo diag ap x` | `A⁻¹ * x` for a triangular packed `A`, over `x` | `getElem_tpsv_upper`, `getElem_tpsv_lower` |
+| `tpsvT uplo diag ap x` | `A⁻ᵀ * x` for a triangular packed `A`, over `x` | `getElem_tpsvT_upper`, `getElem_tpsvT_lower` |
+
+As `syr` and `syr2`, `spr` and `spr2` return `ap` when `α = 0` and skip the columns with
+`x[j] = 0` (with `x[j] = y[j] = 0` for `spr2`), as the reference BLAS does. `blas%` selects them
+from the views `ap.upperPacked`, `ap.unitLowerPacked`, …, and `ap.symUpperPacked`,
+`ap.symLowerPacked`, with `spr` and `spr2` for a target such as `ap.symLowerPacked += α • x * xᵀ`.
 
 The other Level 3 routines also run directly on any `Mat`, update their last argument in place
 when its array is not shared, and leave the elements outside the result unchanged:
